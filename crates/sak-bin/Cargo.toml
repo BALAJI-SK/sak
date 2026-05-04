@@ -1,0 +1,15 @@
+[package]
+name = "sak-bin"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sak"
+path = "src/main.rs"
+
+[dependencies]
+sak-sdk = { path = "../sak-sdk" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

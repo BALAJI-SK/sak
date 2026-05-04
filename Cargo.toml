@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/sak-core",
+    "crates/sak-reflex",
+    "crates/sak-guardian",
+    "crates/sak-state",
+    "crates/sak-sdk",
+    "crates/sak-bin",
+]
+
+# Throwaway programs are isolated workspaces in throwaway/throwaway-{a,b,c}/
+# They each have incompatible Solana SDK version pins and must be built separately.
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"

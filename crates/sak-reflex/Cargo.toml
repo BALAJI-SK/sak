@@ -1,0 +1,10 @@
+[package]
+name = "sak-reflex"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+sak-core = { path = "../sak-core" }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }

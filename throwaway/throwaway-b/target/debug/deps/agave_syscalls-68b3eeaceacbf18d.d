@@ -1,0 +1,9 @@
+/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-b/target/debug/deps/agave_syscalls-68b3eeaceacbf18d.d: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/cpi.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/logging.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/mem_ops.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/sysvar.rs
+
+/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-b/target/debug/deps/libagave_syscalls-68b3eeaceacbf18d.rmeta: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/cpi.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/logging.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/mem_ops.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/sysvar.rs
+
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/lib.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/cpi.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/logging.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/mem_ops.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/agave-syscalls-3.1.14/src/sysvar.rs:

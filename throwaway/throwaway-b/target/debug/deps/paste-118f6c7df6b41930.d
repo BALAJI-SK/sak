@@ -1,0 +1,8 @@
+/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-b/target/debug/deps/paste-118f6c7df6b41930.d: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/attr.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/error.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/segment.rs
+
+/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-b/target/debug/deps/libpaste-118f6c7df6b41930.dylib: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/attr.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/error.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/segment.rs
+
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/lib.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/attr.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/error.rs:
+/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/paste-1.0.15/src/segment.rs:
