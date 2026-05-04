@@ -1,8 +1,0 @@
-/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-a/target/debug/deps/solana_config_program-009d78dc8ab09a80.d: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_instruction.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_processor.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/date_instruction.rs
-
-/Users/tejasskamar/PROJECTS/Solana/sak-1/throwaway/throwaway-a/target/debug/deps/libsolana_config_program-009d78dc8ab09a80.rmeta: /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/lib.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_instruction.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_processor.rs /Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/date_instruction.rs
-
-/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/lib.rs:
-/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_instruction.rs:
-/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/config_processor.rs:
-/Users/tejasskamar/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/solana-config-program-2.1.21/src/date_instruction.rs:
