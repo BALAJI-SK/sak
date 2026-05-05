@@ -3,3 +3,6 @@
 *.key
 .DS_Store
 **/.DS_Store
+**/node_modules
+demo/race-ui/node_modules
+demo/race-ui/package-lock.json  
