@@ -1,20 +1,15 @@
 [package]
-name = "sak-guardian"
+name = "tx-generator"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-sak-core = { path = "../sak-core" }
+sak-guardian = { path = "../../crates/sak-guardian" }
+sak-core = { path = "../../crates/sak-core" }
+tokio = { workspace = true, features = ["full"] }
+serde_json = "1"
+rand = "0.8"
 litesvm = { workspace = true }
-solana-transaction = { workspace = true }
-solana-account = { workspace = true }
-solana-address = { workspace = true }
-serde = { workspace = true }
-serde_yaml = { workspace = true }
-anyhow = { workspace = true }
-tracing = { workspace = true }
-
-[dev-dependencies]
 solana-keypair = { workspace = true }
 solana-message = { workspace = true }
 solana-transaction = { workspace = true }
@@ -22,3 +17,6 @@ solana-signer = { workspace = true }
 solana-address = { workspace = true }
 solana-system-interface = { workspace = true }
 solana-instruction = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = "0.4"

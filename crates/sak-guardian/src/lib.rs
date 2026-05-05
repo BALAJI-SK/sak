@@ -1,15 +1,19 @@
 mod evaluator;
 mod rules;
+mod simulator;
 
 pub use rules::{Rule, RuleSet};
 use evaluator::{TxView, evaluate};
+use simulator::Simulator;
 
 use anyhow::Result;
 use sak_core::{Decision, TxMeta};
+use solana_transaction::versioned::VersionedTransaction;
 use std::path::Path;
 
 pub struct Guardian {
     rules: RuleSet,
+    simulator: Simulator,
 }
 
 impl Guardian {
@@ -17,12 +21,40 @@ impl Guardian {
     pub fn from_yaml(path: impl AsRef<Path>) -> Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let rules: RuleSet = serde_yaml::from_str(&content)?;
-        Ok(Self { rules })
+        Ok(Self {
+            rules,
+            simulator: Simulator::new(),
+        })
     }
 
     /// Construct directly from a rule list (useful for tests).
     pub fn with_rules(rules: Vec<Rule>) -> Self {
-        Self { rules: RuleSet { rules } }
+        Self {
+            rules: RuleSet { rules },
+            simulator: Simulator::new(),
+        }
+    }
+
+    /// Simulate and evaluate a full transaction.
+    /// Returns Decision after running LiteSVM simulation + rule checks.
+    pub fn evaluate(
+        &mut self,
+        tx: &VersionedTransaction,
+    ) -> Decision {
+        let sim_result = self.simulator.simulate(tx);
+        match sim_result {
+            Ok(sim) => {
+                // Convert simulation result to TxView for rule evaluation
+                let view = TxView::from_sim_result(&sim);
+                // Use default TxMeta for simulation-based evaluation
+                let meta = TxMeta::default();
+                evaluate(&self.rules, &view, &meta)
+            }
+            Err(e) => Decision::Reject {
+                rule: "simulation_failed".into(),
+                reason: e,
+            },
+        }
     }
 
     /// Evaluate a transaction represented as account keys + instruction data.
@@ -34,7 +66,7 @@ impl Guardian {
         instructions: &[(u8, &[u8])],
         meta: &TxMeta,
     ) -> Decision {
-        let view = TxView { account_keys, instructions };
+        let view = TxView::from_raw(account_keys, instructions);
         evaluate(&self.rules, &view, meta)
     }
 }

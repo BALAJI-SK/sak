@@ -7,6 +7,8 @@ members = [
     "crates/sak-state",
     "crates/sak-sdk",
     "crates/sak-bin",
+    "demo/tx-generator",
+    "demo/race-server",
 ]
 
 # Throwaway programs are isolated workspaces in throwaway/throwaway-{a,b,c}/
@@ -26,5 +28,6 @@ solana-message = "3"
 solana-transaction = "3"
 solana-signer = "3"
 solana-address = "2"
+solana-account = "3"
 solana-system-interface = "3"
 solana-instruction = "3"

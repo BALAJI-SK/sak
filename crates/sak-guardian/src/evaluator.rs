@@ -1,4 +1,5 @@
 use crate::rules::{Rule, RuleSet};
+use crate::simulator::SimulationResult;
 use sak_core::{Decision, TxMeta};
 
 const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
@@ -6,11 +7,46 @@ const COMPUTE_BUDGET_PROGRAM: &str = "ComputeBudget11111111111111111111111111111
 
 /// A transaction message reduced to the fields the evaluator needs.
 /// This decouples the evaluator from the specific Solana SDK version.
-pub struct TxView<'a> {
-    /// Ordered account keys as base-58 strings.
-    pub account_keys: Vec<String>,
-    /// Each instruction: (program_id_index, data bytes).
-    pub instructions: &'a [(u8, &'a [u8])],
+pub enum TxView<'a> {
+    Raw {
+        account_keys: Vec<String>,
+        instructions: &'a [(u8, &'a [u8])],
+    },
+    Simulated {
+        account_keys: Vec<String>,
+        instructions: Vec<(u8, Vec<u8>)>,
+        pre_balances: std::collections::HashMap<String, u64>,
+        post_balances: std::collections::HashMap<String, u64>,
+        logs: Vec<String>,
+    },
+}
+
+impl<'a> TxView<'a> {
+    pub fn from_raw(keys: Vec<String>, ixs: &'a [(u8, &'a [u8])]) -> Self {
+        TxView::Raw {
+            account_keys: keys,
+            instructions: ixs,
+        }
+    }
+
+    pub fn from_sim_result(sim: &'a SimulationResult) -> Self {
+        // Extract instructions from simulation - for now use empty vec
+        // In full implementation, would parse from transaction
+        TxView::Simulated {
+            account_keys: sim.post_balances.keys().cloned().collect(),
+            instructions: vec![],
+            pre_balances: sim.pre_balances.clone(),
+            post_balances: sim.post_balances.clone(),
+            logs: sim.logs.clone(),
+        }
+    }
+
+    pub fn account_keys(&self) -> &[String] {
+        match self {
+            TxView::Raw { account_keys, .. } => account_keys,
+            TxView::Simulated { account_keys, .. } => account_keys,
+        }
+    }
 }
 
 pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
@@ -38,29 +74,24 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
         }
 
         Rule::ProgramWhitelist { name, programs } => {
-            for (idx, _) in tx.instructions {
-                let program_id = &tx.account_keys[*idx as usize];
-                if !programs.contains(program_id) {
-                    return Some((
-                        format!("program {} is not in the whitelist", program_id),
-                        name.clone(),
-                    ));
-                }
-            }
-            None
-        }
-
-        Rule::DrainCheck { name, max_lamports } => {
-            for (idx, data) in tx.instructions {
-                let program_id = &tx.account_keys[*idx as usize];
-                if program_id == SYSTEM_PROGRAM {
-                    if let Some(lamports) = parse_system_transfer_lamports(data) {
-                        if lamports > *max_lamports {
+            match tx {
+                TxView::Raw { account_keys, instructions } => {
+                    for (idx, _) in *instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if !programs.contains(program_id) {
                             return Some((
-                                format!(
-                                    "transfer of {} lamports exceeds max {} lamports",
-                                    lamports, max_lamports
-                                ),
+                                format!("program {} is not in the whitelist", program_id),
+                                name.clone(),
+                            ));
+                        }
+                    }
+                }
+                TxView::Simulated { account_keys, instructions, .. } => {
+                    for (idx, _) in instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if !programs.contains(program_id) {
+                            return Some((
+                                format!("program {} is not in the whitelist", program_id),
                                 name.clone(),
                             ));
                         }
@@ -70,8 +101,49 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
             None
         }
 
+        Rule::DrainCheck { name, max_lamports } => {
+            match tx {
+                TxView::Simulated { pre_balances, post_balances, .. } => {
+                    // Use simulation balances to detect drains
+                    for (pubkey, pre) in pre_balances {
+                        if let Some(post) = post_balances.get(pubkey) {
+                            let drained = pre.saturating_sub(*post);
+                            if drained > *max_lamports {
+                                return Some((
+                                    format!(
+                                        "account {} drained {} lamports, max {}",
+                                        pubkey, drained, max_lamports
+                                    ),
+                                    name.clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
+                TxView::Raw { account_keys, instructions } => {
+                    for (idx, data) in *instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if program_id == SYSTEM_PROGRAM {
+                            if let Some(lamports) = parse_system_transfer_lamports(data) {
+                                if lamports > *max_lamports {
+                                    return Some((
+                                        format!(
+                                            "transfer of {} lamports exceeds max {} lamports",
+                                            lamports, max_lamports
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            None
+        }
+
         Rule::AccountCountCheck { name, max_count } => {
-            let count = tx.account_keys.len();
+            let count = tx.account_keys().len();
             if count > *max_count {
                 return Some((
                     format!("{} accounts exceeds maximum of {}", count, max_count),
@@ -82,18 +154,40 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
         }
 
         Rule::ComputeUnitsCheck { name, max_units } => {
-            for (idx, data) in tx.instructions {
-                let program_id = &tx.account_keys[*idx as usize];
-                if program_id == COMPUTE_BUDGET_PROGRAM {
-                    if let Some(units) = parse_compute_unit_limit(data) {
-                        if units > *max_units {
-                            return Some((
-                                format!(
-                                    "compute unit limit {} exceeds max {}",
-                                    units, max_units
-                                ),
-                                name.clone(),
-                            ));
+            match tx {
+                TxView::Raw { account_keys, instructions } => {
+                    for (idx, data) in *instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if program_id == COMPUTE_BUDGET_PROGRAM {
+                            if let Some(units) = parse_compute_unit_limit(data) {
+                                if units > *max_units {
+                                    return Some((
+                                        format!(
+                                            "compute unit limit {} exceeds max {}",
+                                            units, max_units
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                TxView::Simulated { instructions, .. } => {
+                    for (idx, data) in instructions {
+                        let program_id = &tx.account_keys()[*idx as usize];
+                        if program_id == COMPUTE_BUDGET_PROGRAM {
+                            if let Some(units) = parse_compute_unit_limit(data) {
+                                if units > *max_units {
+                                    return Some((
+                                        format!(
+                                            "compute unit limit {} exceeds max {}",
+                                            units, max_units
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -102,18 +196,40 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
         }
 
         Rule::PriorityFeeCheck { name, max_microlamports } => {
-            for (idx, data) in tx.instructions {
-                let program_id = &tx.account_keys[*idx as usize];
-                if program_id == COMPUTE_BUDGET_PROGRAM {
-                    if let Some(price) = parse_compute_unit_price(data) {
-                        if price > *max_microlamports {
-                            return Some((
-                                format!(
-                                    "priority fee {} microlamports exceeds max {}",
-                                    price, max_microlamports
-                                ),
-                                name.clone(),
-                            ));
+            match tx {
+                TxView::Raw { account_keys, instructions } => {
+                    for (idx, data) in *instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if program_id == COMPUTE_BUDGET_PROGRAM {
+                            if let Some(price) = parse_compute_unit_price(data) {
+                                if price > *max_microlamports {
+                                    return Some((
+                                        format!(
+                                            "priority fee {} microlamports exceeds max {}",
+                                            price, max_microlamports
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                TxView::Simulated { instructions, .. } => {
+                    for (idx, data) in instructions {
+                        let program_id = &tx.account_keys()[*idx as usize];
+                        if program_id == COMPUTE_BUDGET_PROGRAM {
+                            if let Some(price) = parse_compute_unit_price(data) {
+                                if price > *max_microlamports {
+                                    return Some((
+                                        format!(
+                                            "priority fee {} microlamports exceeds max {}",
+                                            price, max_microlamports
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -122,18 +238,40 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
         }
 
         Rule::MinTransferLamports { name, min_lamports } => {
-            for (idx, data) in tx.instructions {
-                let program_id = &tx.account_keys[*idx as usize];
-                if program_id == SYSTEM_PROGRAM {
-                    if let Some(lamports) = parse_system_transfer_lamports(data) {
-                        if lamports < *min_lamports {
-                            return Some((
-                                format!(
-                                    "transfer of {} lamports is below minimum {} lamports",
-                                    lamports, min_lamports
-                                ),
-                                name.clone(),
-                            ));
+            match tx {
+                TxView::Raw { account_keys, instructions } => {
+                    for (idx, data) in *instructions {
+                        let program_id = &account_keys[*idx as usize];
+                        if program_id == SYSTEM_PROGRAM {
+                            if let Some(lamports) = parse_system_transfer_lamports(data) {
+                                if lamports < *min_lamports {
+                                    return Some((
+                                        format!(
+                                            "transfer of {} lamports is below minimum {} lamports",
+                                            lamports, min_lamports
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+                TxView::Simulated { instructions, .. } => {
+                    for (idx, data) in instructions {
+                        let program_id = &tx.account_keys()[*idx as usize];
+                        if program_id == SYSTEM_PROGRAM {
+                            if let Some(lamports) = parse_system_transfer_lamports(data) {
+                                if lamports < *min_lamports {
+                                    return Some((
+                                        format!(
+                                            "transfer of {} lamports is below minimum {} lamports",
+                                            lamports, min_lamports
+                                        ),
+                                        name.clone(),
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
