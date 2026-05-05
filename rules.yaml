@@ -1,0 +1,34 @@
+rules:
+  - name: max_slippage
+    type: slippage_check
+    max_bps: 200
+
+  - name: allowed_programs
+    type: program_whitelist
+    programs:
+      - JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4   # Jupiter v6
+      - whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc    # Orca Whirlpool
+      - 11111111111111111111111111111111                  # System program
+      - TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA    # SPL Token
+      - ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ     # Associated Token Account
+      - ComputeBudget111111111111111111111111111111       # Compute Budget
+
+  - name: max_account_drain
+    type: drain_check
+    max_lamports: 1000000000
+
+  - name: max_accounts
+    type: account_count_check
+    max_count: 20
+
+  - name: max_compute_units
+    type: compute_units_check
+    max_units: 1400000
+
+  - name: max_priority_fee
+    type: priority_fee_check
+    max_microlamports: 1000000
+
+  - name: min_transfer_value
+    type: min_transfer_lamports
+    min_lamports: 1

@@ -9,3 +9,13 @@ serde = { workspace = true }
 serde_yaml = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+litesvm = { workspace = true }
+solana-keypair = { workspace = true }
+solana-message = { workspace = true }
+solana-transaction = { workspace = true }
+solana-signer = { workspace = true }
+solana-address = { workspace = true }
+solana-system-interface = { workspace = true }
+solana-instruction = { workspace = true }

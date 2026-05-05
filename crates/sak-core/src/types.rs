@@ -17,6 +17,15 @@ pub enum EventKind {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Decision {
     Allow,
-    Warn { warnings: Vec<String> },
     Reject { rule: String, reason: String },
+}
+
+/// Intent metadata supplied by the agent alongside the transaction.
+/// Rules like slippage_check operate on this rather than raw instruction bytes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TxMeta {
+    /// Slippage tolerance declared by the agent, in basis points (1 bps = 0.01%).
+    pub slippage_bps: Option<u64>,
+    /// Human-readable description of the intended action.
+    pub description: Option<String>,
 }

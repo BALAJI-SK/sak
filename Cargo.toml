@@ -19,3 +19,12 @@ serde_yaml = "0.9"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1"
+# Solana modular crates — versions proven by throwaway-b/c
+litesvm = "0.11"
+solana-keypair = "3"
+solana-message = "3"
+solana-transaction = "3"
+solana-signer = "3"
+solana-address = "2"
+solana-system-interface = "3"
+solana-instruction = "3"
