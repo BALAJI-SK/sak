@@ -11,8 +11,8 @@
 | Pillar | Component | What It Does |
 |--------|-----------|--------------|
 | **Pillar 2** | **Guardian** (✅ Built) | Simulates every transaction in LiteSVM before signing. Blocks malicious tx with **zero on-chain cost**. |
-| **Pillar 1** | **Reflex Engine** (🚧 In Progress) | Subscribes to Yellowstone Geyser push streams. Reacts to on-chain events within the same slot. |
-| **Pillar 3** | **ZK State** (🚧 In Progress) | Stores agent state in Light Protocol ZK-compressed accounts. 100–1000× cheaper rent. |
+| **Pillar 1** | **Reflex Engine** (✅ Built) | Subscribes to Yellowstone Geyser push streams. Reacts to on-chain events within the same slot. |
+| **Pillar 3** | **ZK State** (✅ Built) | Stores agent state in Light Protocol ZK-compressed accounts. 100–1000× cheaper rent. |
 
 ---
 
