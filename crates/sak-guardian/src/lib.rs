@@ -27,6 +27,16 @@ impl Guardian {
         })
     }
 
+    /// Load rules from YAML and use an existing LiteSVM instance.
+    pub fn from_yaml_with_svm(path: impl AsRef<Path>, svm: litesvm::LiteSVM) -> Result<Self> {
+        let content = std::fs::read_to_string(path)?;
+        let rules: RuleSet = serde_yaml::from_str(&content)?;
+        Ok(Self {
+            rules,
+            simulator: Simulator::with_svm(svm),
+        })
+    }
+
     /// Construct directly from a rule list (useful for tests).
     pub fn with_rules(rules: Vec<Rule>) -> Self {
         Self {

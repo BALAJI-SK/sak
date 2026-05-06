@@ -29,3 +29,22 @@ pub struct TxMeta {
     /// Human-readable description of the intended action.
     pub description: Option<String>,
 }
+
+/// Feedback verdict derived from user star rating.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FeedbackVerdict {
+    Correct,   // 4-5 stars
+    Wrong,     // 1-2 stars
+    Neutral,   // 3 stars
+}
+
+/// User feedback submission for a Guardian decision.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GuardianFeedback {
+    pub timestamp: String,
+    pub decision: String,
+    pub rule: Option<String>,
+    pub description: Option<String>,
+    pub stars: u8,  // 1-5
+    pub verdict: FeedbackVerdict,
+}

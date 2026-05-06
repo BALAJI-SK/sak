@@ -27,6 +27,14 @@ impl Simulator {
         }
     }
 
+    /// Create a Simulator using an existing LiteSVM instance.
+    pub fn with_svm(svm: LiteSVM) -> Self {
+        Self {
+            svm,
+            pre_accounts: vec![],
+        }
+    }
+
     /// Simulate a transaction using LiteSVM.
     /// Returns SimulationResult with pre/post balances and logs.
     pub fn simulate(

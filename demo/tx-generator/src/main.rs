@@ -7,7 +7,6 @@ use solana_system_interface::instruction::transfer;
 use solana_transaction::Transaction;
 use solana_signer::Signer;
 use solana_address::Address;
-use std::str::FromStr;
 use tokio::time::{interval, Duration};
 
 struct TxFactory {
@@ -20,9 +19,8 @@ impl TxFactory {
         let mut svm = litesvm::LiteSVM::new();
         let payer = Keypair::new();
         // Airdrop 10 SOL to payer
-        match svm.airdrop(&payer.pubkey(), 10_000_000_000) {
-            Ok(_) => eprintln!("Airdrop successful"),
-            Err(e) => eprintln!("Airdrop failed: {:?}", e),
+        if let Err(e) = svm.airdrop(&payer.pubkey(), 10_000_000_000) {
+            eprintln!("Airdrop failed: {:?}", e);
         }
         eprintln!("TxFactory created. Payer: {} Balance: {} lamports",
                   payer.pubkey(),
@@ -30,78 +28,39 @@ impl TxFactory {
         Self { svm, payer }
     }
 
-    /// Generate a malicious transaction (evil corpus pattern)
-    fn evil_tx(&self, pattern: usize) -> (Transaction, TxMeta) {
-        let recipient = Address::new_unique();
-
-        match pattern % 20 {
-            0 => {
-                // 99% slippage
-                let ix = transfer(&self.payer.pubkey(), &recipient, 1_000);
-                let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
-                let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
-                let meta = TxMeta {
-                    slippage_bps: Some(9900),
-                    description: Some("99% slippage swap".into()),
-                };
-                (tx, meta)
-            }
-            1 => {
-                // Drain entire balance
-                let ix = transfer(&self.payer.pubkey(), &recipient, u64::MAX);
-                let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
-                let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
-                (tx, TxMeta {
-                    description: Some("Drain entire balance".into()),
-                    ..Default::default()
-                })
-            }
-            2 => {
-                // Unknown program
-                let fake_program = Address::from_str("FaKe1111111111111111111111111111111111111111").unwrap();
-                let ix = solana_instruction::Instruction {
-                    program_id: fake_program,
-                    accounts: vec![],
-                    data: vec![],
-                };
-                let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
-                let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
-                (tx, TxMeta {
-                    description: Some("Unknown program".into()),
-                    ..Default::default()
-                })
-            }
-            _ => {
-                // Default: simple transfer (valid)
-                let ix = transfer(&self.payer.pubkey(), &recipient, 1_000);
-                let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
-                let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
-                (tx, TxMeta {
-                    description: Some("Valid transfer".into()),
-                    ..Default::default()
-                })
-            }
-        }
-    }
-
-    /// Generate a valid transaction
-    fn valid_tx(&self) -> (Transaction, TxMeta) {
-        let recipient = Address::new_unique();
-        let ix = transfer(&self.payer.pubkey(), &recipient, 500_000);
-        let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
-        let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
-        (tx, TxMeta {
-            slippage_bps: Some(100), // 1% slippage - within limits
-            description: Some("Valid transfer 0.005 SOL".into()),
-        })
-    }
-
-    fn random_tx(&self) -> (Transaction, TxMeta) {
+    fn generate(&self) -> (Transaction, TxMeta) {
         let mut rng = rand::thread_rng();
+        let recipient = Address::new_unique();
+
         if rng.gen_bool(0.7) {
-            self.evil_tx(rng.gen_range(0..20))
+            // Evil transaction (70%)
+            let (lamports, slippage_bps, desc) = match rng.gen_range(0..5) {
+                0 => (u64::MAX, None, "Drain entire balance"),
+                1 => (1_000, Some(9900), "99% slippage swap"),
+                2 => (5_000_000_000, None, "Disguised fee drain"),
+                _ => (1_000, None, "Unknown program"),
+            };
+
+            let ix = transfer(&self.payer.pubkey(), &recipient, lamports);
+            let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
+            let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
+            let meta = TxMeta {
+                slippage_bps,
+                description: Some(desc.into()),
+                ..Default::default()
+            };
+            (tx, meta)
         } else {
-            self.valid_tx()
+            // Valid transaction (30%)
+            let ix = transfer(&self.payer.pubkey(), &recipient, 500_000);
+            let msg = Message::new(&[ix], Some(&self.payer.pubkey()));
+            let tx = Transaction::new(&[&self.payer], msg, self.svm.latest_blockhash());
+            let meta = TxMeta {
+                slippage_bps: Some(100),
+                description: Some("Valid transfer 0.005 SOL".into()),
+                ..Default::default()
+            };
+            (tx, meta)
         }
     }
 }
@@ -110,8 +69,19 @@ impl TxFactory {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let mut guardian = Guardian::from_yaml("rules.yaml").expect("Failed to load rules.yaml");
     let factory = TxFactory::new();
+    
+    // Create Guardian WITH the same SVM as TxFactory
+    let mut guardian = {
+        let mut svm = litesvm::LiteSVM::new();
+        // Copy the payer account to the new SVM
+        if let Some(account) = factory.svm.get_account(&factory.payer.pubkey()) {
+            let _ = svm.set_account(factory.payer.pubkey(), account);
+        }
+        Guardian::from_yaml_with_svm("rules.yaml", svm)
+            .expect("Failed to load rules.yaml")
+    };
+    
     let mut ticker = interval(Duration::from_secs(2));
 
     tracing::info!("Transaction generator started - sending to stdout");
@@ -119,7 +89,7 @@ async fn main() {
     loop {
         ticker.tick().await;
 
-        let (tx, meta) = factory.random_tx();
+        let (tx, meta) = factory.generate();
         let decision = guardian.evaluate(&tx.into(), &meta);
 
         let log_entry = serde_json::json!({
