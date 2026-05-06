@@ -17,10 +17,16 @@ struct TxFactory {
 
 impl TxFactory {
     fn new() -> Self {
-        let svm = litesvm::LiteSVM::new();
+        let mut svm = litesvm::LiteSVM::new();
         let payer = Keypair::new();
-        // Note: In production, properly fund the payer
-        // For demo, we'll handle simulation failures gracefully
+        // Airdrop 10 SOL to payer
+        match svm.airdrop(&payer.pubkey(), 10_000_000_000) {
+            Ok(_) => eprintln!("Airdrop successful"),
+            Err(e) => eprintln!("Airdrop failed: {:?}", e),
+        }
+        eprintln!("TxFactory created. Payer: {} Balance: {} lamports",
+                  payer.pubkey(),
+                  svm.get_balance(&payer.pubkey()).unwrap_or(0));
         Self { svm, payer }
     }
 
@@ -114,7 +120,7 @@ async fn main() {
         ticker.tick().await;
 
         let (tx, meta) = factory.random_tx();
-        let decision = guardian.evaluate(&tx.into());
+        let decision = guardian.evaluate(&tx.into(), &meta);
 
         let log_entry = serde_json::json!({
             "timestamp": chrono::Utc::now().to_rfc3339(),

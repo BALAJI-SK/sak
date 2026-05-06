@@ -2,7 +2,7 @@
 //! This is the high-level interface that agents use to interact with SAK-1.
 
 use anyhow::Result;
-use sak_core::Decision;
+use sak_core::{Decision, TxMeta};
 use solana_transaction::versioned::VersionedTransaction;
 
 /// High-level SDK for SAK-1.
@@ -55,9 +55,9 @@ impl Kernel {
 
     /// Submit a transaction through the Guardian.
     /// Returns Decision after simulation + rule evaluation.
-    pub fn submit(&mut self, tx: &VersionedTransaction) -> Decision {
+    pub fn submit(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision {
         match &mut self.guardian {
-            Some(g) => g.evaluate(tx),
+            Some(g) => g.evaluate(tx, meta),
             None => {
                 tracing::warn!("Guardian not initialized, allowing transaction");
                 Decision::Allow

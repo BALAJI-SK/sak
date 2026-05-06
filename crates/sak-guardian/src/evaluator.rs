@@ -1,6 +1,8 @@
 use crate::rules::{Rule, RuleSet};
 use crate::simulator::SimulationResult;
 use sak_core::{Decision, TxMeta};
+use solana_message::VersionedMessage;
+use solana_transaction::versioned::VersionedTransaction;
 
 const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
 const COMPUTE_BUDGET_PROGRAM: &str = "ComputeBudget111111111111111111111111111111";
@@ -29,12 +31,25 @@ impl<'a> TxView<'a> {
         }
     }
 
-    pub fn from_sim_result(sim: &'a SimulationResult) -> Self {
-        // Extract instructions from simulation - for now use empty vec
-        // In full implementation, would parse from transaction
+    pub fn from_tx_and_sim(tx: &VersionedTransaction, sim: &SimulationResult) -> Self {
+        let msg = match &tx.message {
+            VersionedMessage::Legacy(msg) => msg,
+            _ => panic!("legacy message required"),
+        };
+
+        let account_keys: Vec<String> = msg.account_keys
+            .iter()
+            .map(|k| k.to_string())
+            .collect();
+
+        let instructions: Vec<(u8, Vec<u8>)> = msg.instructions
+            .iter()
+            .map(|ix| (ix.program_id_index, ix.data.clone()))
+            .collect();
+
         TxView::Simulated {
-            account_keys: sim.post_balances.keys().cloned().collect(),
-            instructions: vec![],
+            account_keys,
+            instructions,
             pre_balances: sim.pre_balances.clone(),
             post_balances: sim.post_balances.clone(),
             logs: sim.logs.clone(),

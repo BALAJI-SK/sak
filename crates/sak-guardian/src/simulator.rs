@@ -1,8 +1,9 @@
 use anyhow::Result;
 use litesvm::LiteSVM;
+use solana_message::VersionedMessage;
 use solana_transaction::versioned::VersionedTransaction;
 use std::collections::HashMap;
-use solana_account::{AccountSharedData, ReadableAccount};
+use solana_account::{Account, ReadableAccount};
 
 /// Result of simulating a transaction in LiteSVM.
 pub struct SimulationResult {
@@ -15,7 +16,7 @@ pub struct SimulationResult {
 
 pub struct Simulator {
     svm: LiteSVM,
-    pre_accounts: Vec<(solana_address::Address, AccountSharedData)>,
+    pre_accounts: Vec<(solana_address::Address, Account)>,
 }
 
 impl Simulator {
@@ -32,9 +33,20 @@ impl Simulator {
         &mut self,
         tx: &VersionedTransaction,
     ) -> Result<SimulationResult, String> {
-        // Store pre-state (simplified - in production would snapshot all accounts)
-        self.pre_accounts = vec![];
+        // Step 1: snapshot pre-state from tx account keys
+        let msg = match &tx.message {
+            VersionedMessage::Legacy(msg) => msg,
+            _ => return Err("not a legacy tx".to_string()),
+        };
 
+        self.pre_accounts = msg.account_keys
+            .iter()
+            .filter_map(|key| {
+                self.svm.get_account(key).map(|acc| (*key, acc))
+            })
+            .collect();
+
+        // Step 2: now run simulation
         let result = self.svm.simulate_transaction(tx.clone());
 
         match result {

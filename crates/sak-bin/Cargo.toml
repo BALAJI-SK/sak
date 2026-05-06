@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 sak-sdk = { path = "../sak-sdk" }
+sak-core = { path = "../sak-core" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

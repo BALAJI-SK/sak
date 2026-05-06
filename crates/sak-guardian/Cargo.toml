@@ -9,6 +9,7 @@ litesvm = { workspace = true }
 solana-transaction = { workspace = true }
 solana-account = { workspace = true }
 solana-address = { workspace = true }
+solana-message = { workspace = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 anyhow = { workspace = true }
@@ -16,7 +17,6 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 solana-keypair = { workspace = true }
-solana-message = { workspace = true }
 solana-transaction = { workspace = true }
 solana-signer = { workspace = true }
 solana-address = { workspace = true }

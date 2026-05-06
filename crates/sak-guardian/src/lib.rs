@@ -40,19 +40,21 @@ impl Guardian {
     pub fn evaluate(
         &mut self,
         tx: &VersionedTransaction,
+        meta: &TxMeta,
     ) -> Decision {
         let sim_result = self.simulator.simulate(tx);
         match sim_result {
             Ok(sim) => {
-                // Convert simulation result to TxView for rule evaluation
-                let view = TxView::from_sim_result(&sim);
-                // Use default TxMeta for simulation-based evaluation
-                let meta = TxMeta::default();
-                evaluate(&self.rules, &view, &meta)
+                // Convert simulation result + original tx to TxView for rule evaluation
+                let view = TxView::from_tx_and_sim(tx, &sim);
+                evaluate(&self.rules, &view, meta)
             }
             Err(e) => Decision::Reject {
-                rule: "simulation_failed".into(),
-                reason: e,
+                rule: "pre_sign_simulation".into(),
+                reason: format!(
+                    "transaction would fail on-chain: {}",
+                    e
+                ),
             },
         }
     }
