@@ -3830,6 +3830,7 @@ dependencies = [
  "sak-guardian",
  "sak-reflex",
  "sak-state",
+ "solana-transaction 3.1.0",
  "tokio",
  "tracing",
 ]
