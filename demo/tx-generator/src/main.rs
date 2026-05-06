@@ -9,7 +9,6 @@ use solana_signer::Signer;
 use solana_address::Address;
 use std::str::FromStr;
 use tokio::time::{interval, Duration};
-use chrono::Utc;
 
 struct TxFactory {
     svm: litesvm::LiteSVM,
@@ -20,6 +19,8 @@ impl TxFactory {
     fn new() -> Self {
         let svm = litesvm::LiteSVM::new();
         let payer = Keypair::new();
+        // Note: In production, properly fund the payer
+        // For demo, we'll handle simulation failures gracefully
         Self { svm, payer }
     }
 

@@ -6,12 +6,12 @@ rules:
   - name: allowed_programs
     type: program_whitelist
     programs:
-      - JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4   # Jupiter v6
-      - whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc    # Orca Whirlpool
-      - 11111111111111111111111111111111                  # System program
-      - TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA    # SPL Token
-      - ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ     # Associated Token Account
-      - ComputeBudget111111111111111111111111111111       # Compute Budget
+      - "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"   # Jupiter v6
+      - "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"    # Orca Whirlpool
+      - "11111111111111111111111111111111"                  # System program
+      - "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"    # SPL Token
+      - "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ"     # Associated Token Account
+      - "ComputeBudget111111111111111111111111111111"       # Compute Budget
 
   - name: max_account_drain
     type: drain_check
