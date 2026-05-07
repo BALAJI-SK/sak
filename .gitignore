@@ -6,3 +6,4 @@
 **/node_modules
 demo/race-ui/node_modules
 demo/race-ui/package-lock.json  
+demo/race-ui/node_modules 

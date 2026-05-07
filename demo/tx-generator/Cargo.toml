@@ -3,7 +3,7 @@ name = "tx-generator"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
+ [dependencies]
 sak-guardian = { path = "../../crates/sak-guardian" }
 sak-core = { path = "../../crates/sak-core" }
 tokio = { workspace = true, features = ["full"] }
@@ -17,6 +17,8 @@ solana-signer = { workspace = true }
 solana-address = { workspace = true }
 solana-system-interface = { workspace = true }
 solana-instruction = { workspace = true }
+solana-compute-budget-interface = { workspace = true }
+uuid = { version = "1", features = ["v4"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = "0.4"
