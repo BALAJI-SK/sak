@@ -25,11 +25,16 @@ This system retools the existing dark-log demo into a **judge-readable security 
 | File / folder | What's in it |
 |---|---|
 | `README.md` | This file. Brand context + content + visual + iconography |
-| `SKILL.md` | Cross-compatible Agent Skill manifest |
 | `colors_and_type.css` | All design tokens — colors, type scale, radii, shadows, motion |
-| `assets/` | Logos, brand marks, icon snippets |
-| `preview/` | Tiny HTML cards that populate the Design System tab |
-| `ui_kits/dashboard/` | Pixel-faithful redesign of the Guardian dashboard. Open `index.html` |
+| `assets/` | Brand marks (sak-shield.svg, sak-wordmark.svg) |
+| `fonts/` | Surgena font family (light/regular/medium/semibold/bold + italics) |
+| `preview/` | HTML preview cards (buttons, cards, colors, type) |
+| `ui_kits/dashboard/` | Reference implementation with JSX components. Open `index.html` |
+| `race-ui/` | Production React UI with Vite + TypeScript |
+| `race-ui/src/App.tsx` | Three-panel layout (Flow, Live Trace, Transaction Log) |
+| `race-ui/src/index.css` | Full design tokens + Tailwind directives |
+| `tx-generator/` | Generates 70/30 mix of evil/valid transactions |
+| `race-server/` | WebSocket server with feedback API endpoints |
 
 ---
 
@@ -57,9 +62,22 @@ This system retools the existing dark-log demo into a **judge-readable security 
 | `text-2` | `#8888aa` | Secondary, metadata, timestamps |
 
 ### Typography
+- **Display + UI:** Surgena (light/regular/medium/semibold/bold + italics) — loaded locally from `race-ui/src/` (otf + ttf formats)
+- **Code / numbers / addresses:** JetBrains Mono (400 / 500 / 700) — loaded from Google Fonts via CSS `@import`
 
-- **Display + UI:** Inter (300 / 400 / 500 / 600 / 700) — loaded from Google Fonts
-- **Code / numbers / addresses:** JetBrains Mono (400 / 500 / 700) — loaded from Google Fonts
+### Font Files
+| File | Weight | Style |
+|------|--------|-------|
+| `surgena-light.otf` / `.ttf` | 300 | Normal |
+| `surgena-lightitalic.otf` / `.ttf` | 300 | Italic |
+| `surgena-regular.otf` / `.ttf` | 400 | Normal |
+| `surgena-italic.otf` / `.ttf` | 400 | Italic |
+| `surgena-medium.otf` / `.ttf` | 500 | Normal |
+| `surgena-mediumitalic.otf` / `.ttf` | 500 | Italic |
+| `surgena-semibold.otf` / `.ttf` | 600 | Normal |
+| `surgena-semibolditalic.otf` / `.ttf` | 600 | Italic |
+| `surgena-bold.otf` / `.ttf` | 700 | Normal |
+| `surgena-bolditalic.otf` / `.ttf` | 700 | Italic |
 
 ---
 
@@ -165,11 +183,15 @@ The product uses **Lucide** (lucide-react, but loaded via the CDN icon-font in t
 
 ---
 
-## Substitutions to confirm
+## Implementation Notes
 
-- **Fonts:** Inter and JetBrains Mono are loaded from Google Fonts via CSS `@import`. No local `.ttf` is checked in. If you want offline-safe local copies, attach them and I'll wire them up in `fonts/`.
-- **Lucide icons:** Loaded from the unpkg CDN — same approach as the existing demo. If the production build needs to ship offline, swap to `lucide-react` as an npm dep and tree-shake.
-- **Solana / Geyser logos:** Not provided in repo. The flow diagram references them by name only ("REFLEX ENGINE — Geyser logo" per the brief); I've placed neutral icon glyphs as placeholders in the kit. Drop real SVGs into `assets/` to upgrade.
+- **Fonts:** Surgena font family is checked in locally (otf + ttf formats) in `demo/fonts/` and `demo/race-ui/src/`. Also loaded via `@font-face` in `race-ui/src/index.css`.
+- **Lucide icons:** Loaded from the unpkg CDN in `index.html`. `lucide.createIcons()` called in `App.tsx` after mount.
+- **Three-panel layout:** Implemented in `race-ui/src/App.tsx`:
+  - LEFT: Flow diagram (Agent → Guardian → Solana) + Live Stats
+  - CENTER: Live Trace showing latest transaction
+  - RIGHT: Transaction Log with severity pills
+- **Build system:** Uses Vite 6 + TypeScript + Tailwind CSS 3. Production build: `npm run build` (157 KB JS + 4.85 KB CSS gzipped).
 
 ---
 
