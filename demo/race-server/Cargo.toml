@@ -1,0 +1,28 @@
+[package]
+name = "race-server"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true, features = ["full"] }
+axum = { version = "0.7", features = ["ws"] }
+tokio-tungstenite = "0.24"
+serde = { workspace = true }
+serde_json = "1"
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+sak-guardian = { path = "../../crates/sak-guardian" }
+sak-core = { path = "../../crates/sak-core" }
+litesvm = { workspace = true }
+solana-keypair = { workspace = true }
+solana-message = { workspace = true }
+solana-transaction = { workspace = true }
+solana-signer = { workspace = true }
+solana-address = { workspace = true }
+solana-system-interface = { workspace = true }
+solana-compute-budget-interface = { workspace = true }
+solana-instruction = { workspace = true }
+solana-sdk-ids = { workspace = true }
+solana-account = { workspace = true }
+rand = "0.8"
+chrono = "0.4"

@@ -8,3 +8,7 @@ sak-core = { path = "../sak-core" }
 serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+# Light Protocol SDK for ZK compression (Pillar 3)
+light-sdk = { workspace = true }
+light-compressed-token = { workspace = true }
+light-compressed-account = { workspace = true }

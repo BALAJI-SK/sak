@@ -5,9 +5,10 @@ edition = "2021"
 
 [dependencies]
 sak-core = { path = "../sak-core" }
-sak-reflex = { path = "../sak-reflex" }
 sak-guardian = { path = "../sak-guardian" }
+sak-reflex = { path = "../sak-reflex" }
 sak-state = { path = "../sak-state" }
 tokio = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+solana-transaction = { workspace = true }
