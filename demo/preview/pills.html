@@ -1,0 +1,17 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../colors_and_type.css"><style>
+body{margin:0;padding:24px;background:var(--bg)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+</style></head><body>
+<div class="row">
+  <span class="sak-pill sak-pill--blocked">● Blocked</span>
+  <span class="sak-pill sak-pill--allowed">● Allowed</span>
+  <span class="sak-pill sak-pill--critical">Critical</span>
+  <span class="sak-pill sak-pill--high">High</span>
+  <span class="sak-pill sak-pill--medium">Medium</span>
+  <span class="sak-pill sak-pill--low">Low</span>
+</div>
+<div class="row" style="margin-top:14px;gap:14px">
+  <span style="display:inline-flex;align-items:center;gap:8px;color:var(--fg-2);font-size:13px"><span class="sak-dot sak-dot--pulse"></span> System Active</span>
+  <span style="display:inline-flex;align-items:center;gap:8px;color:var(--sak-red);font-size:13px"><span class="sak-dot" style="background:var(--sak-red);box-shadow:0 0 8px var(--sak-red)"></span> Critical alert</span>
+</div>
+</body></html>

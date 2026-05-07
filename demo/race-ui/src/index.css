@@ -1,8 +1,66 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Surgena — brand sans (replaces Inter) */
+@font-face { font-family:'Surgena'; font-weight:300; font-style:normal;  src:url('surgena-light.otf')        format('opentype'), url('surgena-light.ttf')        format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:300; font-style:italic;  src:url('surgena-lightitalic.otf')  format('opentype'), url('surgena-lightitalic.ttf')  format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:400; font-style:normal;  src:url('surgena-regular.otf')      format('opentype'), url('surgena-regular.ttf')      format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:400; font-style:italic;  src:url('surgena-italic.otf')       format('opentype'), url('surgena-italic.ttf')       format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:500; font-style:normal;  src:url('surgena-medium.otf')       format('opentype'), url('surgena-medium.ttf')       format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:500; font-style:italic;  src:url('surgena-mediumitalic.otf') format('opentype'), url('surgena-mediumitalic.ttf') format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:600; font-style:normal;  src:url('surgena-semibold.otf')     format('opentype'), url('surgena-semibold.ttf')     format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:600; font-style:italic;  src:url('surgena-semibolditalic.otf') format('opentype'), url('surgena-semibolditalic.ttf') format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:700; font-style:normal;  src:url('surgena-bold.otf')         format('opentype'), url('surgena-bold.ttf')         format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:700; font-style:italic;  src:url('surgena-bolditalic.otf')   format('opentype'), url('surgena-bolditalic.ttf')   format('truetype'); font-display:swap; }
+
+:root {
+  /* ---------- Color tokens (raw) ---------- */
+  --sak-bg:        #0a0a0f;   /* page background, near-black, blue-shifted */
+  --sak-surface:   #12121a;   /* cards, panels */
+  --sak-surface-2: #181822;   /* hover surface, header pill */
+  --sak-border:    #1e1e2e;   /* hairline borders, dividers */
+  --sak-border-2:  #2a2a3e;   /* hover borders */
+
+  --sak-green:     #00ff88;   /* ALLOWED, brand, system-active */
+  --sak-red:       #ff3366;   /* BLOCKED, critical */
+  --sak-orange:    #ff9900;   /* high severity, warning */
+  --sak-yellow:    #ffd700;   /* medium severity, star ratings */
+  --sak-purple:    #7c3aed;   /* AI agent node, links, accent */
+  --sak-blue:      #3b82f6;   /* informational accent (charts) */
+
+  --sak-text:      #ffffff;
+  --sak-text-2:    #8888aa;   /* secondary, metadata, timestamps */
+  --sak-text-3:    #54546a;   /* disabled, placeholders */
+
+  /* Semantic color aliases */
+  --fg:       var(--sak-text);
+  --fg-2:     var(--sak-text-2);
+  --fg-3:     var(--sak-text-3);
+  --bg:       var(--sak-bg);
+  --surface:  var(--sak-surface);
+  --border:   var(--sak-border);
+
+  --allowed:  var(--sak-green);
+  --blocked:  var(--sak-red);
+  --warn:     var(--sak-orange);
+  --accent:   var(--sak-purple);
+
+  /* ---------- Type ---------- */
+  --font-sans: 'Surgena', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ---------- Radius ---------- */
+  --r-xs:    4px;   /* tiny chip */
+  --r-sm:    6px;
+  --r-md:    8px;   /* button, pill, input */
+  --r-lg:    12px;  /* card, tile */
+  --r-xl:    16px;
+  --r-pill:  999px;
+
+  /* ---------- Motion ---------- */
+  --ease-out:  cubic-bezier(0.2, 0.8, 0.2, 1);
+  --d-slide:   280ms;
+  --d-glow:    1000ms;
+}
 
 * {
   margin: 0;
@@ -11,25 +69,65 @@
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--fg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv11', 'ss01';
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
+/* ---------- Scrollbar ---------- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--sak-border-2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f56; }
+
+/* ---------- Decision pills ---------- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--border);
+}
+.pill--blocked  { background: rgba(255,51,102,0.08); color: var(--sak-red); border-color: rgba(255,51,102,0.4); }
+.pill--allowed  { background: rgba(0,255,136,0.08); color: var(--sak-green); border-color: rgba(0,255,136,0.4); }
+.pill--critical { background: rgba(255,51,102,0.08); color: var(--sak-red); border-color: rgba(255,51,102,0.4); }
+.pill--high     { background: rgba(255,153,0,0.10); color: var(--sak-orange); border-color: rgba(255,153,0,0.4); }
+.pill--medium   { background: rgba(255,215,0,0.10); color: var(--sak-yellow); border-color: rgba(255,215,0,0.35); }
+.pill--low      { background: rgba(136,136,170,0.10); color: var(--fg-2); border-color: var(--border); }
+
+/* ---------- Status dot ---------- */
+.dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--sak-green);
+  box-shadow: 0 0 8px 0 var(--sak-green);
+}
+.dot--pulse { animation: pulse 2s var(--ease-out) infinite; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.15); }
 }
 
-::-webkit-scrollbar-track {
-  background: #0a0a0a;
+/* ---------- Card glow on appear ---------- */
+@keyframes glow-red {
+  0% { box-shadow: 0 0 24px -4px rgba(255,51,102,0.5); border-color: rgba(255,51,102,0.4); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: var(--border); }
 }
-
-::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 3px;
+@keyframes glow-green {
+  0% { box-shadow: 0 0 24px -4px rgba(0,255,136,0.5); border-color: rgba(0,255,136,0.4); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: var(--border); }
 }
-
-::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+@keyframes slide-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
 }
