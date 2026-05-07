@@ -2,11 +2,16 @@ import { useEffect, useState } from "react";
 import "./index.css";
 
 interface LogEntry {
+  id: string;
   timestamp: string;
   decision: "allowed" | "rejected";
   rule?: string;
   reason?: string;
+  attack_type?: string;
   description?: string;
+  severity?: "critical" | "high" | "medium" | "low" | "none";
+  simulated_loss_usd?: number;
+  simulation_time_ms?: number;
   feedback?: "correct" | "wrong" | "neutral";
 }
 
@@ -187,7 +192,7 @@ function App() {
           <div className="space-y-3">
             {log.map((entry, i) => (
               <div
-                key={i}
+                key={entry.id || i}
                 className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-200 ${
                   entry.decision === "rejected"
                     ? "border-red-800/50 bg-red-950/20 hover:bg-red-950/30"
@@ -200,14 +205,27 @@ function App() {
                   <i data-lucide={entry.decision === "rejected" ? "shield-alert" : "shield-check"}
                      className={`w-6 h-6 ${entry.decision === "rejected" ? "text-red-400" : "text-green-400"}`}
                      style={{strokeWidth: 1.5}}
-                  ></i>
+                   ></i>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`font-semibold ${entry.decision === "rejected" ? "text-red-400" : "text-green-400"}`}>
                       {entry.decision === "rejected" ? "BLOCKED" : "ALLOWED"}
                     </span>
-                    <span className="text-gray-600 text-xs">{entry.timestamp}</span>
+                    {entry.severity && entry.severity !== "none" && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        entry.severity === "critical" ? "bg-red-950 text-red-400 border border-red-800" :
+                        entry.severity === "high" ? "bg-orange-950 text-orange-400 border border-orange-800" :
+                        entry.severity === "medium" ? "bg-yellow-950 text-yellow-400 border border-yellow-800" :
+                        "bg-gray-950 text-gray-400 border border-gray-800"
+                      }`}>
+                        {entry.severity}
+                      </span>
+                    )}
+                    {entry.attack_type && (
+                      <span className="text-gray-400 text-xs">{entry.attack_type}</span>
+                    )}
+                    <span className="text-gray-600 text-xs ml-auto">{entry.timestamp}</span>
                   </div>
                   {entry.rule && (
                     <div className="text-yellow-400 text-sm mb-1">Rule: {entry.rule}</div>
@@ -218,10 +236,24 @@ function App() {
                   {entry.description && (
                     <div className="text-gray-500 text-xs">{entry.description}</div>
                   )}
+                  {(entry.simulated_loss_usd || entry.simulation_time_ms) && (
+                    <div className="flex gap-4 mt-2 text-xs text-gray-600">
+                      {entry.simulated_loss_usd && (
+                        <span className="text-red-400/70">
+                          Potential loss: ${entry.simulated_loss_usd.toFixed(2)}
+                        </span>
+                      )}
+                      {entry.simulation_time_ms && (
+                        <span>
+                          Detected in {entry.simulation_time_ms}ms
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex-shrink-0 flex gap-2">
                   {/* Feedback Buttons - only show if not yet submitted */}
-                  {!entry.feedback && !submitted.has(i) && (
+                  {entry.decision === "rejected" && !entry.feedback && !submitted.has(i) && (
                     <div className="flex gap-2">
                       {[1, 2, 3, 4, 5].map((star) => (
                         <button

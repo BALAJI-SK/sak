@@ -59,13 +59,13 @@ impl Guardian {
                 let view = TxView::from_tx_and_sim(tx, &sim);
                 evaluate(&self.rules, &view, meta)
             }
-            Err(e) => Decision::Reject {
-                rule: "pre_sign_simulation".into(),
-                reason: format!(
-                    "transaction would fail on-chain: {}",
-                    e
-                ),
-            },
+            Err(e) => {
+                let human_reason = parse_simulation_error(&e);
+                Decision::Reject {
+                    rule: "pre_sign_simulation".into(),
+                    reason: human_reason,
+                }
+            }
         }
     }
 
@@ -80,5 +80,22 @@ impl Guardian {
     ) -> Decision {
         let view = TxView::from_raw(account_keys, instructions);
         evaluate(&self.rules, &view, meta)
+    }
+}
+
+/// Parse raw simulation error into human-readable English.
+fn parse_simulation_error(err: &str) -> String {
+    if err.contains("InsufficientFundsForRent") {
+        "Insufficient funds — transaction would leave account below rent minimum".into()
+    } else if err.contains("insufficient funds") || err.contains("InsufficientFunds") {
+        "Insufficient balance to complete transaction".into()
+    } else if err.contains("InvalidAccountData") {
+        "Invalid account data — possible wrong token address".into()
+    } else if err.contains("ProgramFailedToComplete") {
+        "Program execution failed — transaction would revert on-chain".into()
+    } else if err.contains("would exceed max") || err.contains("exceeds") {
+        "Transaction exceeds account or program limits".into()
+    } else {
+        "Transaction would fail on-chain — blocked before signing".into()
     }
 }
