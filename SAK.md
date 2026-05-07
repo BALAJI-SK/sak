@@ -1,21 +1,21 @@
-# CLAUDE.md — SAK-1 Project Context
+# CLAUDE.md — SAK Project Context
 > Read this entire file before touching any code, suggesting any architecture, or answering any question about this project.
 
 ---
 
 ## What This Project Is
 
-**SAK-1 (Solana Agent Kernel)** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the execution and safety layer — not the AI, not the blockchain, not the agent framework. Everything in between.
+**SAK (Solana Agent Kernel)** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the execution and safety layer — not the AI, not the blockchain, not the agent framework. Everything in between.
 
 **One-line definition:**
-> SAK-1 gives AI agents same-slot reflexes, a pre-sign kill switch, and 1000x cheaper state storage — in one Rust kernel that plugs under any existing agent framework.
+> SAK gives AI agents same-slot reflexes, a pre-sign kill switch, and 1000x cheaper state storage — in one Rust kernel that plugs under any existing agent framework.
 
 **Grandma test:**
 > "We give crypto bots a tiny kernel inside Solana so their trades always land perfectly — no wasted money, no stuck transactions."
 
 ---
 
-## What SAK-1 Is NOT Building
+## What SAK Is NOT Building
 
 Never suggest building these. They are explicitly out of scope.
 
@@ -24,7 +24,7 @@ Never suggest building these. They are explicitly out of scope.
 - ❌ A new SVM (use LiteSVM — maintained by Anza)
 - ❌ A new ZK system (use Light Protocol)
 - ❌ EVM support (Solana only, always)
-- ❌ A new agent framework (SAK-1 plugs under elizaOS/Agent Kit)
+- ❌ A new agent framework (SAK plugs under elizaOS/Agent Kit)
 - ❌ A DEX or trading protocol
 
 ---
@@ -197,7 +197,7 @@ pub enum Decision {
 ## Repository Structure
 
 ```
-sak-1/
+SAK/
 ├── Cargo.toml                  # workspace root
 ├── CLAUDE.md                   # this file
 ├── README.md                   # project readme with demo link
@@ -273,7 +273,7 @@ napi-rs = "*"                    # TypeScript bindings
 ### Demo UI
 - React + Vite + Tailwind
 - axum + tokio-tungstenite (WebSocket server)
-- Side-by-side race: SAK-1 agent vs polling agent
+- Side-by-side race: SAK agent vs polling agent
 
 ### Observability
 - tracing + tracing-subscriber (structured logs)
@@ -313,7 +313,7 @@ let position = kernel.state().get::<Position>("position").await?;
 
 ```typescript
 // TypeScript SDK (napi-rs bindings)
-import { Kernel } from '@sak-1/sdk';
+import { Kernel } from '@SAK/sdk';
 
 const kernel = await Kernel.new(config);
 
@@ -331,7 +331,7 @@ await kernel.subscribe(filter, async (event) => {
 
 ## Competitive Positioning
 
-### Where SAK-1 Sits
+### Where SAK Sits
 
 ```
 ┌─────────────────────────┐
@@ -339,7 +339,7 @@ await kernel.subscribe(filter, async (event) => {
 ├─────────────────────────┤
 │  elizaOS / Agent Kit    │  ← Orchestration (NOT our layer)
 ├─────────────────────────┤
-│  SAK-1 Kernel  ◄────────│  ← WE ARE HERE
+│  SAK Kernel  ◄────────│  ← WE ARE HERE
 ├─────────────────────────┤
 │  Solana Network         │  ← Settlement (NOT our layer)
 └─────────────────────────┘
@@ -358,7 +358,7 @@ No project in Colosseum history has composed Geyser push + LiteSVM simulation + 
 
 ---
 
-## Why Large Context Windows Don't Replace SAK-1
+## Why Large Context Windows Don't Replace SAK
 
 This objection will come up. The answer:
 
@@ -366,7 +366,7 @@ This objection will come up. The answer:
 2. **Inference is 2-10 seconds** — Solana slots are 400ms — you're always stale
 3. **Rules need enforcement, not memory** — "don't exceed 2% slippage" in context is a request. Guardian is a hard constraint
 4. **Novel hallucinations have no prior pattern** — a fake mint address looks statistically normal
-5. **Cost** — 1M token context at $15/M tokens × 1000 tx/day = $15,000/day. Small LLM + SAK-1 = $0.40/day
+5. **Cost** — 1M token context at $15/M tokens × 1000 tx/day = $15,000/day. Small LLM + SAK = $0.40/day
 
 ---
 
@@ -394,7 +394,7 @@ The demo must show one thing working end-to-end. Priority order:
 
 ### Full Demo (all three pillars)
 Two-column React UI:
-- Left: SAK-1 agent reacting via Geyser push
+- Left: SAK agent reacting via Geyser push
 - Right: Vanilla polling agent (elizaOS-style)
 - Same trigger event drives both
 - Latency counter showing slot delta
@@ -509,7 +509,7 @@ Breakeven: 9.8M intents/month
 > "We stop AI bots from making expensive mistakes with your money — automatically, before it happens."
 
 **To VCs/judges:**
-> "Every agent framework tells you what to build. SAK-1 is the first runtime that makes it safe to ship."
+> "Every agent framework tells you what to build. SAK is the first runtime that makes it safe to ship."
 
 **The one-liner:**
 > "Ship agents that can't be used against you."

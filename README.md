@@ -1,12 +1,12 @@
-# SAK-1 — Solana Agent Kernel
+# SAK — Solana Agent Kernel
 
 > Give AI agents same-slot reflexes, a pre-sign kill switch, and 1000× cheaper state storage — in one Rust kernel that plugs under any existing agent framework.
 
-**SAK-1** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the **execution and safety layer** — not the AI, not the blockchain, not the agent framework.
+**SAK** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the **execution and safety layer** — not the AI, not the blockchain, not the agent framework.
 
 ---
 
-## What SAK-1 Does
+## What SAK Does
 
 | Pillar | Component | What It Does |
 |--------|-----------|--------------|
@@ -27,7 +27,7 @@
 ### Build Everything
 
 ```bash
-git clone https://github.com/your-org/sak-1.git
+git clone https://github.com/your-org/SAK.git
 cd sak
 cargo build --workspace
 ```
@@ -92,7 +92,7 @@ Navigate to http://localhost:3000
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  SAK-1 Guardian                              │
+│  SAK Guardian                              │
 │  Live safety log — every transaction          │
 │  simulated before signing                    │
 ├─────────────────────────────────────────────┤
@@ -113,7 +113,7 @@ Navigate to http://localhost:3000
 ## Project Structure
 
 ```
-sak-1/
+SAK/
 ├── Cargo.toml                     # workspace root
 ├── README.md                     # this file
 ├── STATUS.md                     # build progress tracker
@@ -298,7 +298,7 @@ rules:
 - **Colosseum Frontier:** https://arena.colosseum.org/
 - **Documentation:** See `SAK.md` for full project context
 - **Status:** See `STATUS.md` for build progress
-- **Build Phases:** See `SAK-1_BUILD_PHASES.md` for detailed build guide
+- **Build Phases:** See `SAK_BUILD_PHASES.md` for detailed build guide
 
 ---
 

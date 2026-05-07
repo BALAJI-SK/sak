@@ -1,11 +1,11 @@
-//! SAK-1 SDK — Public API for agent developers.
-//! This is the high-level interface that agents use to interact with SAK-1.
+//! SAK SDK — Public API for agent developers.
+//! This is the high-level interface that agents use to interact with SAK.
 
 use anyhow::Result;
 use sak_core::{Decision, TxMeta};
 use solana_transaction::versioned::VersionedTransaction;
 
-/// High-level SDK for SAK-1.
+/// High-level SDK for SAK.
 /// Wraps Guardian, Reflex Engine, and ZK State into one interface.
 pub struct Kernel {
     guardian: Option<sak_guardian::Guardian>,

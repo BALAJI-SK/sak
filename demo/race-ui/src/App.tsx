@@ -104,7 +104,7 @@ function App() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-green-400 to-emerald-300 bg-clip-text text-transparent tracking-tight">
-                SAK-1 Guardian
+                SAK Guardian
               </h1>
               <p className="text-gray-500 text-sm mt-2 tracking-wide">
                 Live safety log — every transaction simulated before signing

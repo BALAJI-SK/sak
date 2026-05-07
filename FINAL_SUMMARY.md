@@ -1,4 +1,4 @@
-# SAK-1 — Final Build Summary (as of May 6, 2026)
+# SAK — Final Build Summary (as of May 6, 2026)
 
 **Hackathon:** Colosseum Frontier  
 **Deadline:** May 11, 2026 (5 days remaining)  
@@ -147,12 +147,12 @@ test result: ok. 20 passed; 0 failed
 ## File Structure
 
 ```
-sak-1/
+SAK/
 ├── Cargo.toml                     ✅ Workspace with all deps
 ├── README.md                     ✅ Updated with Phase 4/5
 ├── STATUS.md                     ✅ Progress tracker
 ├── SAK.md                       ✅ Full project context
-├── SAK-1_BUILD_PHASES.md        ✅ Build guide
+├── SAK_BUILD_PHASES.md        ✅ Build guide
 ├── DEVIATIONS_AND_MISSING.md     ✅ Deviation analysis
 ├── FIXES_SUMMARY.md              ✅ All fixes documented
 ├── PHASE1_2_SUMMARY.md         ✅ Phase 1&2 summary
@@ -202,7 +202,7 @@ sak-1/
 ## Demo Script (90 Seconds)
 
 ```
-0:00-0:10  "SAK-1 gives AI agents same-slot reflexes, 
+0:00-0:10  "SAK gives AI agents same-slot reflexes, 
              a pre-sign kill switch, and 1000x cheaper state."
              
 0:10-0:30  Show terminal: cargo run -p race-server

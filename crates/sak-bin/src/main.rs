@@ -1,4 +1,4 @@
-//! SAK-1 Binary — CLI daemon.
+//! SAK Binary — CLI daemon.
 //! Combines all pillars into one runnable daemon.
 
 use sak_sdk::Kernel;
@@ -10,7 +10,7 @@ use tracing::{info, error};
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    info!("Starting SAK-1 daemon...");
+    info!("Starting SAK daemon...");
 
     // Initialize Kernel with configuration
     let config = sak_sdk::KernelConfig {
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
         }
     };
 
-    info!("SAK-1 daemon started successfully");
+    info!("SAK daemon started successfully");
     info!("Guardian loaded with rules from rules.yaml");
 
     // Keep running (in production, would start Reflex Engine + API server)

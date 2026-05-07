@@ -1,4 +1,4 @@
-# SAK-1 — Build Status
+# SAK — Build Status
 
 **Hackathon:** Colosseum Frontier
 **Deadline:** May 11, 2026
@@ -149,7 +149,7 @@ Light Protocol ZK-compressed agent state. 100×–1000× cheaper rent than regul
 ## Repo Structure
 
 ```
-sak-1/
+SAK/
 ├── Cargo.toml              workspace root
 ├── rules.yaml              default Guardian ruleset
 ├── STATUS.md               this file

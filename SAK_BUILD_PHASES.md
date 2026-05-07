@@ -1,4 +1,4 @@
-# SAK-1 — Build Phases
+# SAK — Build Phases
 
 **Hackathon deadline: May 11, 2026 | Days available: 6**
 
@@ -32,7 +32,7 @@ rustup update stable
 
 ```bash
 # Create repo and workspace
-mkdir sak-1 && cd sak-1
+mkdir SAK && cd SAK
 git init
 
 # Create workspace Cargo.toml
@@ -80,7 +80,7 @@ cargo build
 ### Folder Structure to Create
 
 ```
-sak-1/
+SAK/
 ├── Cargo.toml
 ├── CLAUDE.md
 ├── README.md
@@ -193,7 +193,7 @@ pub struct RejectionLog {
     pub timestamp_ms: u64,
 }
 
-/// Top-level SAK-1 errors.
+/// Top-level SAK errors.
 #[derive(Error, Debug)]
 pub enum SakError {
     #[error("Guardian rejected transaction: {rule} — {reason}")]
@@ -750,7 +750,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-green-400 font-mono p-8">
-      <h1 className="text-2xl font-bold mb-2">SAK-1 Guardian</h1>
+      <h1 className="text-2xl font-bold mb-2">SAK Guardian</h1>
       <p className="text-gray-500 mb-6 text-sm">
         Live safety log — every transaction simulated before signing
       </p>
@@ -945,7 +945,7 @@ Build this to prove the 3-slot advantage claim.
 // tests/latency_bench.rs
 
 // Run two agents against the same devnet event:
-// 1. SAK-1 agent: Geyser push → logs slot + timestamp
+// 1. SAK agent: Geyser push → logs slot + timestamp
 // 2. Control agent: polls RPC every 400ms → logs slot + timestamp
 // Compare: which agent reacted first and by how many slots
 
@@ -1090,7 +1090,7 @@ let position = kernel.state().get::<Position>("position").await?;
 
 ```typescript
 // TypeScript SDK (napi-rs bindings)
-import { Kernel } from '@sak-1/sdk';
+import { Kernel } from '@SAK/sdk';
 
 const kernel = await Kernel.new(config);
 
@@ -1138,7 +1138,7 @@ Two-column React UI:
 
 ```
 ┌─────────────────────┐  ┌─────────────────────┐
-│   SAK-1 Agent       │  │  Polling Agent       │
+│   SAK Agent       │  │  Polling Agent       │
 │   (Geyser push)     │  │  (RPC 400ms poll)    │
 │                     │  │                      │
 │  Slot 2841: REACTED │  │  Slot 2844: reacted  │
@@ -1168,7 +1168,7 @@ Two-column React UI:
 ### Deployment Requirements
 
 - Live URL that judges can open (not localhost, not GitHub Pages)
-- Custom domain (e.g., `sak-1.xyz` or `solanaagentkernel.com`)
+- Custom domain (e.g., `SAK.xyz` or `solanaagentkernel.com`)
 - HTTPS
 
 ### Recommended Stack
@@ -1182,7 +1182,7 @@ Domain               → Namecheap or Cloudflare (~$10)
 ### GitHub README Requirements
 
 ```markdown
-# SAK-1 — Solana Agent Kernel
+# SAK — Solana Agent Kernel
 
 Give AI agents same-slot reflexes, a pre-sign kill switch, and 1000x cheaper state.
 

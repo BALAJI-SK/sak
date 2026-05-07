@@ -1,4 +1,4 @@
-# SAK-1 — All Deviations Fixed
+# SAK — All Deviations Fixed
 
 **Date:** May 5, 2026  
 **Status:** ✅ All 3 deviations corrected
@@ -90,7 +90,7 @@ cargo test -p sak-guardian   # ✅ 20/20 tests pass
 
 ### Current State
 
-SAK-1 is **NOT yet a full runtime kernel**. It is a **Guardian rule engine with LiteSVM simulation**.
+SAK is **NOT yet a full runtime kernel**. It is a **Guardian rule engine with LiteSVM simulation**.
 
 What exists:
 - ✅ Pillar 2: Guardian with LiteSVM simulation
@@ -105,7 +105,7 @@ What's missing (for full kernel):
 
 ### Hackathon Pitch (Honest Version)
 
-> "Today we're demonstrating Pillar 2 — the Guardian pre-sign kill switch that simulates every transaction in LiteSVM before signing. The full SAK-1 kernel integrating all three pillars is our post-hackathon roadmap."
+> "Today we're demonstrating Pillar 2 — the Guardian pre-sign kill switch that simulates every transaction in LiteSVM before signing. The full SAK kernel integrating all three pillars is our post-hackathon roadmap."
 
 **Don't claim:** "We are a complete agent runtime kernel" ← Not true yet.
 
@@ -276,4 +276,4 @@ You should see:
 
 ---
 
-**Summary:** All 3 deviations from the build guide are now fixed. SAK-1 Guardian is a working LiteSVM-powered rule engine with a live demo UI.
+**Summary:** All 3 deviations from the build guide are now fixed. SAK Guardian is a working LiteSVM-powered rule engine with a live demo UI.

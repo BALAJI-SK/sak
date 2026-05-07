@@ -1,4 +1,4 @@
-# SAK-1 — Final Build Status (as of May 6, 2026)
+# SAK — Final Build Status (as of May 6, 2026)
 
 **Hackathon:** Colosseum Frontier  
 **Deadline:** May 11, 2026 — **5 days remaining**  
@@ -103,7 +103,7 @@ test result: ok. 20 passed; 0 failed
 
 ### Day 3 of 5
 - [ ] Deploy demo to live URL
-- [ ] Buy custom domain (sak-1.xyz)
+- [ ] Buy custom domain (SAK.xyz)
 - [ ] Configure HTTPS
 - [ ] Test from mobile + incognito
 
@@ -166,7 +166,7 @@ test result: ok. 20 passed; 0 failed
 
 ### Phase 7 — Full Race Demo (HIGH PRIORITY)
 
-**Goal:** Show SAK-1 agent vs polling agent side-by-side.
+**Goal:** Show SAK agent vs polling agent side-by-side.
 
 **What's needed:**
 1. **Test demo end-to-end**
@@ -192,7 +192,7 @@ test result: ok. 20 passed; 0 failed
 **Deployment:**
 - [ ] Deploy React UI to Vercel/Netlify
 - [ ] Deploy race-server to Hetzner VPS (Frankfurt)
-- [ ] Buy custom domain (e.g., `sak-1.xyz`)
+- [ ] Buy custom domain (e.g., `SAK.xyz`)
 - [ ] Configure HTTPS
 
 **Submission:**
@@ -206,7 +206,7 @@ test result: ok. 20 passed; 0 failed
 ## 🎯 Demo Script (90 Seconds)
 
 ```
-0:00-0:10  "SAK-1 gives AI agents same-slot reflexes, 
+0:00-0:10  "SAK gives AI agents same-slot reflexes, 
              a pre-sign kill switch, and 1000x cheaper state."
              
 0:10-0:30  Show terminal: cargo run -p race-server
@@ -240,11 +240,11 @@ test result: ok. 20 passed; 0 failed
 - `DEVIATIONS_AND_MISSING.md` — Original 3 deviations
 - `STATUS.md` — Build progress tracker
 - `SAK.md` — Full project context
-- `SAK-1_BUILD_PHASES.md` — Detailed build guide
+- `SAK_BUILD_PHASES.md` — Detailed build guide
 
 ### Code Structure
 ```
-sak-1/
+SAK/
 ├── Cargo.toml                     ✅ Workspace + all deps
 ├── rules.yaml                    ✅ Guardian rules (fixed)
 ├── crates/
@@ -333,7 +333,7 @@ commit 4cbc3e0 - Fix all 3 deviations: LiteSVM + demo UI
 
 ### Day 3 of 5
 - [ ] Deploy demo to live URL
-- [ ] Buy custom domain (sak-1.xyz)
+- [ ] Buy custom domain (SAK.xyz)
 - [ ] Configure HTTPS
 - [ ] Test from mobile + incognito
 
@@ -366,7 +366,7 @@ Breakeven: 9.8M intents/month
 
 ## 🏆 Competitive Advantage
 
-**What SAK-1 does that NO ONE else does:**
+**What SAK does that NO ONE else does:**
 1. **LiteSVM simulation before signing** (zero on-chain cost for rejections)
 2. **Geyser push** (not polling) → same-slot reflexes
 3. **ZK compression** → 1000× cheaper agent state
