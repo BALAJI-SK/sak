@@ -1,0 +1,210 @@
+openapi: 3.0.3
+info:
+  title: SAK Guardian — Race Server API
+  version: 1.0.0
+  description: |
+    Real-time transaction simulation dashboard for SAK (Solana Agent Kernel).
+
+    The race-server streams live transaction logs over WebSocket and
+    collects user feedback on Guardian decisions via REST.
+  contact:
+    url: https://github.com/anomalyco/sak
+
+servers:
+  - url: http://localhost:3001
+    description: Local development (race-server)
+
+paths:
+  /ws:
+    get:
+      summary: WebSocket transaction stream
+      description: |
+        Upgrades to WebSocket and streams JSON transaction log entries
+        in real time. Each message represents one transaction evaluated
+        by the Guardian (allowed or rejected).
+      tags: [WebSocket]
+      responses:
+        "101":
+          description: WebSocket upgrade successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TransactionLogEntry"
+              example:
+                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                timestamp: "2026-05-07T16:21:55.123456Z"
+                decision: "rejected"
+                rule: "max_slippage"
+                reason: "9900bps exceeds maximum 200bps"
+                attack_type: "99% Slippage Swap"
+                description: "Agent tried to swap 0.01 SOL with 99% slippage tolerance"
+                severity: "critical"
+                simulated_loss_usd: 49.86
+                simulation_time_ms: 43
+
+  /feedback:
+    post:
+      summary: Submit feedback
+      description: |
+        Record user feedback on a Guardian decision. Used to track
+        accuracy of the rule engine over time.
+      tags: [Feedback]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuardianFeedback"
+            example:
+              timestamp: "2026-05-07T16:21:55Z"
+              decision: "rejected"
+              rule: "max_slippage"
+              description: "99% Slippage Swap"
+              stars: 1
+              verdict: "Wrong"
+      responses:
+        "200":
+          description: Feedback recorded
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "recorded"
+
+  /feedback/summary:
+    get:
+      summary: Feedback summary
+      description: |
+        Returns aggregate feedback statistics: total entries,
+        correct/wrong counts, and accuracy percentage.
+      tags: [Feedback]
+      responses:
+        "200":
+          description: Summary statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedbackSummary"
+              example:
+                total: 18
+                correct: 14
+                wrong: 4
+                accuracy: 77.8
+
+components:
+  schemas:
+    TransactionLogEntry:
+      type: object
+      required:
+        - id
+        - timestamp
+        - decision
+        - attack_type
+        - description
+        - severity
+        - simulation_time_ms
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique transaction identifier
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp
+          example: "2026-05-07T16:21:55.123456Z"
+        decision:
+          type: string
+          enum: [allowed, rejected]
+          description: Guardian decision
+        rule:
+          type: string
+          nullable: true
+          description: Triggered rule name (null if allowed)
+          example: "max_slippage"
+        reason:
+          type: string
+          nullable: true
+          description: Human-readable rejection reason
+          example: "9900bps exceeds maximum 200bps"
+        attack_type:
+          type: string
+          description: Attack or transaction type label
+          example: "99% Slippage Swap"
+        description:
+          type: string
+          description: Human-readable description
+          example: "Agent tried to swap 0.01 SOL with 99% slippage tolerance"
+        severity:
+          type: string
+          enum: [critical, high, medium, low, none]
+          description: Severity level
+        simulated_loss_usd:
+          type: number
+          format: double
+          nullable: true
+          description: Estimated prevented loss in USD
+          example: 49.86
+        simulation_time_ms:
+          type: integer
+          description: Simulation duration in milliseconds
+          example: 43
+
+    GuardianFeedback:
+      type: object
+      required:
+        - timestamp
+        - decision
+        - stars
+        - verdict
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: Timestamp of the original transaction
+          example: "2026-05-07T16:21:55Z"
+        decision:
+          type: string
+          enum: [allowed, rejected]
+          description: Original Guardian decision
+        rule:
+          type: string
+          nullable: true
+          description: Rule that triggered (null if allowed)
+          example: "max_slippage"
+        description:
+          type: string
+          nullable: true
+          description: Transaction description
+          example: "99% Slippage Swap"
+        stars:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: "Star rating: 1-2=Wrong, 3=Neutral, 4-5=Correct"
+        verdict:
+          type: string
+          enum: [Correct, Wrong, Neutral]
+          description: Derived verdict from star rating
+
+    FeedbackSummary:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total feedback entries
+          example: 18
+        correct:
+          type: integer
+          description: Count of Correct verdicts
+          example: 14
+        wrong:
+          type: integer
+          description: Count of Wrong verdicts
+          example: 4
+        accuracy:
+          type: number
+          format: double
+          description: "Correctness percentage = (correct / total) * 100"
+          example: 77.8
