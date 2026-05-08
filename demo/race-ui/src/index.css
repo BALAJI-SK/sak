@@ -1,16 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* Surgena — brand sans (replaces Inter) */
-@font-face { font-family:'Surgena'; font-weight:300; font-style:normal;  src:url('surgena-light.otf')        format('opentype'), url('surgena-light.ttf')        format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:300; font-style:italic;  src:url('surgena-lightitalic.otf')  format('opentype'), url('surgena-lightitalic.ttf')  format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:400; font-style:normal;  src:url('surgena-regular.otf')      format('opentype'), url('surgena-regular.ttf')      format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:400; font-style:italic;  src:url('surgena-italic.otf')       format('opentype'), url('surgena-italic.ttf')       format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:500; font-style:normal;  src:url('surgena-medium.otf')       format('opentype'), url('surgena-medium.ttf')       format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:500; font-style:italic;  src:url('surgena-mediumitalic.otf') format('opentype'), url('surgena-mediumitalic.ttf') format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:600; font-style:normal;  src:url('surgena-semibold.otf')     format('opentype'), url('surgena-semibold.ttf')     format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:600; font-style:italic;  src:url('surgena-semibolditalic.otf') format('opentype'), url('surgena-semibolditalic.ttf') format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:700; font-style:normal;  src:url('surgena-bold.otf')         format('opentype'), url('surgena-bold.ttf')         format('truetype'); font-display:swap; }
-@font-face { font-family:'Surgena'; font-weight:700; font-style:italic;  src:url('surgena-bolditalic.otf')   format('opentype'), url('surgena-bolditalic.ttf')   format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:300; font-style:normal;  src:url('/fonts/surgena-light.otf')        format('opentype'), url('/fonts/surgena-light.ttf')        format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:300; font-style:italic;  src:url('/fonts/surgena-lightitalic.otf')  format('opentype'), url('/fonts/surgena-lightitalic.ttf')  format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:400; font-style:normal;  src:url('/fonts/surgena-regular.otf')      format('opentype'), url('/fonts/surgena-regular.ttf')      format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:400; font-style:italic;  src:url('/fonts/surgena-italic.otf')       format('opentype'), url('/fonts/surgena-italic.ttf')       format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:500; font-style:normal;  src:url('/fonts/surgena-medium.otf')       format('opentype'), url('/fonts/surgena-medium.ttf')       format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:500; font-style:italic;  src:url('/fonts/surgena-mediumitalic.otf') format('opentype'), url('/fonts/surgena-mediumitalic.ttf') format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:600; font-style:normal;  src:url('/fonts/surgena-semibold.otf')     format('opentype'), url('/fonts/surgena-semibold.ttf')     format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:600; font-style:italic;  src:url('/fonts/surgena-semibolditalic.otf') format('opentype'), url('/fonts/surgena-semibolditalic.ttf') format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:700; font-style:normal;  src:url('/fonts/surgena-bold.otf')         format('opentype'), url('/fonts/surgena-bold.ttf')         format('truetype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:700; font-style:italic;  src:url('/fonts/surgena-bolditalic.otf')   format('opentype'), url('/fonts/surgena-bolditalic.ttf')   format('truetype'); font-display:swap; }
 
 :root {
   /* ---------- Color tokens (raw) ---------- */
