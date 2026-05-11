@@ -11,6 +11,7 @@ use sak_core::{Decision, TxMeta};
 use solana_transaction::versioned::VersionedTransaction;
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 pub struct Guardian {
     rules: RuleSet,
@@ -18,6 +19,11 @@ pub struct Guardian {
     /// Names of the pack files merged into `rules`, in load order. Empty when
     /// rules were constructed in-memory (e.g. via `with_rules`).
     pack_sources: Vec<String>,
+    /// Cumulative lamports transferred in the current session.
+    /// Used by `SessionSpendCheck` to catch drip-drain attacks where each
+    /// individual tx passes `drain_check` but the running total does not.
+    /// Reset via `Guardian::reset_session()`.
+    session_spend: Arc<Mutex<u64>>,
 }
 
 /// Summary of the loaded rule set — surfaced to clients via the
@@ -36,6 +42,22 @@ fn parse_rule_set(content: &str) -> Result<RuleSet> {
 }
 
 impl Guardian {
+    fn fresh_session() -> Arc<Mutex<u64>> {
+        Arc::new(Mutex::new(0))
+    }
+
+    /// Reset the cumulative session spend counter to zero.
+    /// Call this at the start of a new trading session / time window to allow
+    /// the `session_spend_check` rule to start accumulating fresh totals.
+    pub fn reset_session(&self) {
+        *self.session_spend.lock().unwrap() = 0;
+    }
+
+    /// Current cumulative session spend in lamports.
+    pub fn session_spend_lamports(&self) -> u64 {
+        *self.session_spend.lock().unwrap()
+    }
+
     /// Load rules from a single YAML file.
     pub fn from_yaml(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
@@ -45,6 +67,7 @@ impl Guardian {
             rules,
             simulator: Simulator::new(),
             pack_sources: vec![path.display().to_string()],
+            session_spend: Self::fresh_session(),
         })
     }
 
@@ -57,6 +80,7 @@ impl Guardian {
             rules,
             simulator: Simulator::with_svm(svm),
             pack_sources: vec![path.display().to_string()],
+            session_spend: Self::fresh_session(),
         })
     }
 
@@ -78,6 +102,7 @@ impl Guardian {
             rules: merged,
             simulator: Simulator::new(),
             pack_sources: sources,
+            session_spend: Self::fresh_session(),
         })
     }
 
@@ -104,6 +129,7 @@ impl Guardian {
             rules: merged,
             simulator: Simulator::new(),
             pack_sources: packs,
+            session_spend: Self::fresh_session(),
         })
     }
 
@@ -113,6 +139,7 @@ impl Guardian {
             rules: RuleSet::new(rules),
             simulator: Simulator::new(),
             pack_sources: Vec::new(),
+            session_spend: Self::fresh_session(),
         }
     }
 
@@ -141,7 +168,7 @@ impl Guardian {
         match sim_result {
             Ok(sim) => {
                 match TxView::from_tx_and_sim(tx, &sim) {
-                    Ok(view) => evaluate(&self.rules, &view, meta),
+                    Ok(view) => evaluate(&self.rules, &view, meta, Some(&self.session_spend)),
                     Err(e) => Decision::Reject {
                         rule: "pre_sign_simulation".into(),
                         reason: e,
@@ -168,7 +195,7 @@ impl Guardian {
         meta: &TxMeta,
     ) -> Decision {
         let view = TxView::from_raw(account_keys, instructions);
-        evaluate(&self.rules, &view, meta)
+        evaluate(&self.rules, &view, meta, Some(&self.session_spend))
     }
 }
 

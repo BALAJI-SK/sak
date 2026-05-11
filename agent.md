@@ -140,7 +140,8 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 | `SlippageCheck` | `slippage_check` | `max_bps: u64` |
 | `ProgramWhitelist` | `program_whitelist` | `programs: Vec<String>` |
 | `BlockedProgram` | `blocked_program` | `program: String` (single program id — negative counterpart of whitelist; indexed for O(1) dispatch) |
-| `DrainCheck` | `drain_check` | `max_lamports: u64` |
+| `DrainCheck` | `drain_check` | `max_lamports: u64` — per-transaction cap |
+| `SessionSpendCheck` | `session_spend_check` | `max_session_lamports: u64` — **stateful cumulative cap**; tracks lamports across calls on the same `Guardian` instance; catches drip-drain attacks where each tx passes `DrainCheck` but the running total does not. Reset via `Guardian::reset_session()`. |
 | `AccountCountCheck` | `account_count_check` | `max_count: usize` |
 | `ComputeUnitsCheck` | `compute_units_check` | `max_units: u32` |
 | `PriorityFeeCheck` | `priority_fee_check` | `max_microlamports: u64` |
@@ -150,7 +151,7 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 
 ### Rule packs (`packs/`)
 
-Rules are no longer a single `rules.yaml`. They are loaded from multiple YAML pack files and merged into one `RuleSet` at startup. The production packs (committed in `packs/`) total **2,010 rule instances** across **8 detector types**:
+Rules are no longer a single `rules.yaml`. They are loaded from multiple YAML pack files and merged into one `RuleSet` at startup. The production packs (committed in `packs/`) total **2,010 rule instances** across **9 detector types**:
 
 | Pack file | Source | Rule instances |
 |-----------|--------|---------------|
@@ -202,6 +203,10 @@ Guardian::with_rules(vec![Rule::SlippageCheck { name: "s".into(), max_bps: 200 }
 guardian.evaluate(&versioned_tx, &tx_meta);      // simulate + evaluate
 guardian.evaluate_raw(account_keys, ixs, meta);  // without LiteSVM simulation
 
+// session state (for session_spend_check)
+guardian.reset_session();                         // zero the cumulative spend counter
+guardian.session_spend_lamports();                // inspect current cumulative total
+
 // telemetry
 let s = guardian.stats();  // RuleStats { total, by_kind, packs }
 ```
@@ -225,7 +230,7 @@ let s = guardian.stats();  // RuleStats { total, by_kind, packs }
 
 ### Tests
 
-**`tests/evil_corpus.rs`** — 28 integration tests grounded in real Web3 AI agent attack vectors (SlowMist, Bitget, Positive Web3). All use real `LiteSVM`, `solana-keypair`, actual transactions.
+**`tests/evil_corpus.rs`** — 29 integration tests grounded in real Web3 AI agent attack vectors (SlowMist, Bitget, Positive Web3). All use real `LiteSVM`, `solana-keypair`, actual transactions.
 
 | Tests | What they assert |
 |-------|-----------------|
@@ -238,14 +243,15 @@ let s = guardian.stats();  // RuleStats { total, by_kind, packs }
 | 26 | BEV sandwich victim — MEV bot forces 9,500 bps slippage on agent swap |
 | 27 | MCP context pollution — poisoned server injects unknown program into tx |
 | 28 | Agent-chain laundering — multi-hop through unlisted intermediary program |
+| **29** | **Drip drain** — 20 × 0.5 SOL; txs 1–4 pass `drain_check` and `session_spend_check`; tx 5 (cumulative 2.5 SOL > 2 SOL cap) is rejected by `session_spend_check` |
 
 **`tests/packs_load.rs`** — integration test that loads all 4 shipped packs from disk and asserts `total >= 2000`, `blocked_program >= 1500`, and all expected detector types are present.
 
 ```bash
-cargo test -p sak-guardian          # run all 29 tests
+cargo test -p sak-guardian          # run all 30 tests
 cargo test -p sak-guardian --test packs_load  # pack-load only
 ```
-Expected: `test result: ok. 29 passed; 0 failed` (28 evil corpus + 1 pack-load).
+Expected: `test result: ok. 30 passed; 0 failed` (29 evil corpus + 1 pack-load).
 
 ---
 
@@ -714,7 +720,7 @@ Never hardcode the actual token. The `.env` file is gitignored — do not commit
 # Build everything
 cargo build --workspace
 
-# Run Guardian tests (29/29 must pass)
+# Run Guardian tests (30/30 must pass)
 cargo test -p sak-guardian
 
 # Run the demo
@@ -796,7 +802,7 @@ tx-generator ──► sak-guardian ──► sak-core    (evaluate full tx via 
 
 | Component | Status | Notes |
 |---|---|---|
-| `sak-guardian` | Full | 29 tests passing (28 evil corpus + 1 pack-load), LiteSVM simulation working |
+| `sak-guardian` | Full | 30 tests passing (29 evil corpus + 1 pack-load), LiteSVM simulation working |
 | `sak-reflex` | Full | Real Yellowstone gRPC connection + reconnect |
 | `sak-state` | Stub | In-memory only, Light Protocol not wired |
 | `sak-sdk` | Full | Kernel API wraps all pillars |
@@ -941,7 +947,7 @@ Animation sequence:
 
 | Component | Status | Notes |
 |---|---|---|
-| `sak-guardian` | Full | 29 tests passing (28 evil corpus + 1 pack-load), LiteSVM simulation working |
+| `sak-guardian` | Full | 30 tests passing (29 evil corpus + 1 pack-load), LiteSVM simulation working |
 | `sak-reflex` | Full | Real Yellowstone gRPC connection + reconnect |
 | `sak-state` | **Stub** | In-memory only, Light Protocol not wired. README updated to reflect this. |
 | `sak-sdk` | Full | Kernel API wraps all pillars |

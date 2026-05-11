@@ -67,6 +67,15 @@ pub enum Rule {
     #[serde(rename = "min_transfer_lamports")]
     MinTransferLamports { name: String, min_lamports: u64 },
 
+    /// Reject once cumulative SOL transferred in this Guardian session exceeds
+    /// the cap. Catches "drip drain" attacks where each individual transfer
+    /// passes `drain_check` but the total over many calls exceeds safe limits.
+    ///
+    /// State is held in `Guardian::session_spend` (an `Arc<Mutex<u64>>`).
+    /// Call `Guardian::reset_session()` to start a new spending window.
+    #[serde(rename = "session_spend_check")]
+    SessionSpendCheck { name: String, max_session_lamports: u64 },
+
     // Stubs — included for YAML schema compatibility, always pass.
     #[serde(rename = "value_check")]
     ValueCheck { name: String, max_usd: f64 },
@@ -90,6 +99,7 @@ impl Rule {
             Rule::ComputeUnitsCheck { name, .. } => name,
             Rule::PriorityFeeCheck { name, .. } => name,
             Rule::MinTransferLamports { name, .. } => name,
+            Rule::SessionSpendCheck { name, .. } => name,
             Rule::ValueCheck { name, .. } => name,
             Rule::DecimalsCheck { name, .. } => name,
         }
@@ -106,6 +116,7 @@ impl Rule {
             Rule::ComputeUnitsCheck { .. } => "compute_units_check",
             Rule::PriorityFeeCheck { .. } => "priority_fee_check",
             Rule::MinTransferLamports { .. } => "min_transfer_lamports",
+            Rule::SessionSpendCheck { .. } => "session_spend_check",
             Rule::ValueCheck { .. } => "value_check",
             Rule::DecimalsCheck { .. } => "decimals_check",
         }

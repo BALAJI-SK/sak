@@ -3,6 +3,7 @@ use crate::simulator::SimulationResult;
 use sak_core::{Decision, TxMeta};
 use solana_message::VersionedMessage;
 use solana_transaction::versioned::VersionedTransaction;
+use std::sync::{Arc, Mutex};
 
 const SYSTEM_PROGRAM: &str = "11111111111111111111111111111111";
 const COMPUTE_BUDGET_PROGRAM: &str = "ComputeBudget111111111111111111111111111111";
@@ -62,7 +63,12 @@ impl<'a> TxView<'a> {
     }
 }
 
-pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
+pub fn evaluate(
+    rules: &RuleSet,
+    tx: &TxView<'_>,
+    meta: &TxMeta,
+    session_spend: Option<&Arc<Mutex<u64>>>,
+) -> Decision {
     // 1. Indexed dispatch for blocklist-style rules:
     //    only consult `blocked_program` rules whose key actually appears in
     //    the tx. With a 2k-entry blocklist, this is O(account_keys) instead
@@ -71,7 +77,7 @@ pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
     for key in keys {
         if let Some(rule_idxs) = rules.indices.blocked_program_by_id.get(key) {
             for &i in rule_idxs {
-                if let Some((reason, rule_name)) = check_rule(&rules.rules[i], tx, meta) {
+                if let Some((reason, rule_name)) = check_rule(&rules.rules[i], tx, meta, session_spend) {
                     tracing::warn!(rule = %rule_name, reason = %reason, "Guardian blocked transaction");
                     return Decision::Reject { rule: rule_name, reason };
                 }
@@ -82,7 +88,7 @@ pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
     // 2. Global rules — scanned in author order, short-circuit on first reject.
     for &i in &rules.indices.global {
         let rule = &rules.rules[i];
-        if let Some((reason, rule_name)) = check_rule(rule, tx, meta) {
+        if let Some((reason, rule_name)) = check_rule(rule, tx, meta, session_spend) {
             tracing::warn!(rule = %rule_name, reason = %reason, "Guardian blocked transaction");
             return Decision::Reject { rule: rule_name, reason };
         }
@@ -92,7 +98,12 @@ pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
     Decision::Allow
 }
 
-fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, String)> {
+fn check_rule(
+    rule: &Rule,
+    tx: &TxView<'_>,
+    meta: &TxMeta,
+    session_spend: Option<&Arc<Mutex<u64>>>,
+) -> Option<(String, String)> {
     match rule {
         Rule::SlippageCheck { name, max_bps } => {
             let bps = meta.slippage_bps?;
@@ -324,9 +335,54 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
             None
         }
 
+        Rule::SessionSpendCheck { name, max_session_lamports } => {
+            // Sum all System Program transfer lamports in this tx.
+            let tx_lamports = extract_transfer_lamports(tx);
+            if tx_lamports == 0 {
+                return None; // No SOL movement — nothing to track.
+            }
+            let state = session_spend?; // If no session state provided, skip.
+            let mut total = state.lock().unwrap();
+            *total = total.saturating_add(tx_lamports);
+            if *total > *max_session_lamports {
+                return Some((
+                    format!(
+                        "cumulative session spend {} lamports exceeds cap {} lamports (this tx: {})",
+                        *total, max_session_lamports, tx_lamports
+                    ),
+                    name.clone(),
+                ));
+            }
+            None
+        }
+
         // Stubs — not yet implemented, always pass.
         Rule::ValueCheck { .. } | Rule::DecimalsCheck { .. } => None,
     }
+}
+
+/// Sum the lamports from all System Program transfer instructions in a tx.
+fn extract_transfer_lamports(tx: &TxView<'_>) -> u64 {
+    let mut total: u64 = 0;
+    match tx {
+        TxView::Raw { account_keys, instructions } => {
+            for (idx, data) in *instructions {
+                if account_keys[*idx as usize] == SYSTEM_PROGRAM {
+                    if let Some(lamps) = parse_system_transfer_lamports(data) {
+                        total = total.saturating_add(lamps);
+                    }
+                }
+            }
+        }
+        TxView::Simulated { pre_balances, post_balances, .. } => {
+            for (pubkey, pre) in pre_balances {
+                if let Some(post) = post_balances.get(pubkey) {
+                    total = total.saturating_add(pre.saturating_sub(*post));
+                }
+            }
+        }
+    }
+    total
 }
 
 // ── Instruction data parsers ──────────────────────────────────────────────────

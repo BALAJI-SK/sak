@@ -1,12 +1,12 @@
 # SAK — Solana Agent Kernel
 
-> The execution kernel for Solana AI agents — pre-sign safety, oracle-grade reflexes, and 1000× cheaper on-chain state in one Rust crate.
+> The execution kernel for Solana AI agents — pre-sign safety for every transaction (payments, data writes, oracle updates, DAO votes), oracle-grade reflexes, and 1000× cheaper on-chain state in one Rust crate.
 
 [![Integrate in 60 seconds →](https://img.shields.io/badge/Integrate%20in%2060%20seconds%20%E2%86%92-7c3aed)](INTEGRATE.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/Rust-1.85%2B-f4662c)](https://rustup.rs/)
 
-SAK is a **Rust execution kernel** that plugs under any Solana AI agent framework. Every transaction is simulated in LiteSVM before the agent ever signs — eliminating capital waste from failed and malicious transactions at zero on-chain cost.
+SAK is a **Rust execution kernel** that plugs under any Solana AI agent framework. Every transaction — whether it moves SOL, writes data to an account, submits an oracle update, or casts a DAO vote — is simulated in LiteSVM before the agent ever signs. If the transaction violates any rule, it is rejected before it reaches the network. Zero on-chain cost, zero irreversible mistakes.
 
 ## Quick Start
 
@@ -14,14 +14,14 @@ SAK is a **Rust execution kernel** that plugs under any Solana AI agent framewor
 git clone https://github.com/BALAJI-SK/sak.git
 cd sak
 cargo build --workspace
-cargo test -p sak-guardian  # 29 tests: 28 evil-corpus + 1 pack-load
+cargo test -p sak-guardian  # 30 tests: 29 evil-corpus + 1 pack-load
 ```
 
 ## What SAK Does
 
 | Pillar | Component | Status | What It Does |
 |--------|-----------|--------|--------------|
-| **Guardian** | `sak-guardian` | ✅ Complete | Simulates every tx in LiteSVM and evaluates against a **2,010-rule** indexed policy set (8 detector types · 4 rule packs). Zero on-chain cost, <50ms. |
+| **Guardian** | `sak-guardian` | ✅ Complete | Simulates every tx in LiteSVM and evaluates against a **2,010-rule** indexed policy set (9 detector types · 4 rule packs). Zero on-chain cost, <50ms. |
 | **Oracle** | `sak-reflex` | ✅ Complete | Yellowstone Geyser push oracle — emits `ChainEvent` into an async channel within the same slot. No polling, no RPC overhead. |
 | **State** | `sak-state` | 🔧 Stub | In-memory HashMap. Light Protocol ZK-compression is the next milestone — 100–1000× cheaper than standard accounts. API surface stable. |
 | **SDK** | `sak-sdk` | ✅ Complete | `Kernel` struct wraps all pillars. One `submit()` call integrates SAK under any agent framework. |
@@ -83,7 +83,7 @@ AI Agent (LLM intent)
 │   ① LiteSVM pre-sign simulation             │
 │   ② Indexed rule dispatch                   │
 │       · 2,003 blocked_program (O(1) lookup) │
-│       · 7   global detectors                │
+│       · 8   global detectors (incl. session)│
 │   ③ Decision: Allow | Reject{rule,reason}   │
 │                                             │
 │  <50ms · off-chain · zero on-chain cost     │
@@ -103,6 +103,21 @@ Background push oracle (same-slot):
 
 Rules are loaded from YAML packs at startup and indexed once. Per-transaction evaluation is `O(programs_touched + global_rules)` — a 2,000-entry blocklist costs the same as a 20-entry one for any given tx.
 
+### What the Guardian covers
+
+SAK evaluates every transaction type an AI agent can produce — not just token swaps:
+
+| Transaction type | Example | Guardian detects |
+|---|---|---|
+| **Payment / SOL transfer** | Agent drains wallet to attacker | `drain_check`, `min_transfer_lamports` |
+| **Repeated small transfers** | Drip drain — 5% every call, total > safe cap | `session_spend_check` |
+| **Token swap** | MEV sandwich forces 95% slippage | `slippage_check` |
+| **Data write** | Agent writes to wrong account via malicious program | `program_whitelist`, `blocked_program` |
+| **Oracle update** | Poisoned MCP injects unknown oracle program | `program_whitelist` |
+| **DAO vote** | Jailbroken agent submits vote via unlisted program | `program_whitelist`, `account_count_check` |
+| **NFT / metadata** | Agent invokes fake token program | `blocked_program` |
+| **Compute abuse** | Malicious plugin triggers compute bomb | `compute_units_check`, `priority_fee_check` |
+
 ### Detector types
 
 | Type | What it checks |
@@ -110,7 +125,8 @@ Rules are loaded from YAML packs at startup and indexed once. Per-transaction ev
 | `slippage_check` | Agent-declared slippage cap (bps) |
 | `program_whitelist` | Reject if any instruction invokes an unlisted program |
 | `blocked_program` | Reject if a specific program id appears in the tx (negative list) |
-| `drain_check` | Reject system-program transfers exceeding `max_lamports` |
+| `drain_check` | Reject system-program transfers exceeding `max_lamports` per tx |
+| `session_spend_check` | Reject once **cumulative** SOL transferred this session exceeds cap — catches drip-drain attacks that evade per-tx limits |
 | `account_count_check` | Reject txs referencing too many accounts |
 | `compute_units_check` | Cap ComputeBudget `SetComputeUnitLimit` |
 | `priority_fee_check` | Cap ComputeBudget `SetComputeUnitPrice` (microlamports) |
@@ -124,7 +140,7 @@ Rules are loaded from YAML packs at startup and indexed once. Per-transaction ev
 | `solana-core.yaml` | 41 curated mainnet programs | 1 (whitelist) |
 | `exploits-blocklist.yaml` | Curated scam program ids | 3 |
 | `tokens-blocklist.yaml` | `solana-labs/token-list` long-tail mints | 2,000 |
-| **Total** | — | **2,010 rule instances · 8 detector types** |
+| **Total** | — | **2,010 rule instances · 9 detector types** |
 
 Packs are also `include_str!`-embedded into the `race-server` binary so production deployments are self-contained — no filesystem dependency.
 
@@ -136,7 +152,7 @@ python3 scripts/gen-rule-packs.py --limit 2000
 
 ### Honest framing
 
-- **8 detector types** is the truthful denominator. The 2,003 blocklist entries are all instances of one detector (`blocked_program`).
+- **9 detector types** is the truthful denominator. The 2,003 blocklist entries are all instances of one detector (`blocked_program`).
 - The `tokens-blocklist.yaml` pack is generated deterministically from `solana-labs/token-list`. Anyone can diff the output against the public list.
 - The 3 exploit entries are curated placeholders, not pulled from a threat-intel feed — the right next step is plumbing in Webacy / GoPlus / on-chain post-mortem feeds.
 
@@ -204,7 +220,7 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 
 ## Evil Corpus
 
-28 tests. All pass. Every pattern grounded in a documented real-world attack vector:
+29 tests. All pass. Every pattern grounded in a documented real-world attack vector:
 
 | # | Attack Pattern | Source | Rule Fired | Severity |
 |---|----------------|--------|-----------|----------|
@@ -221,6 +237,7 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 | **26** | **BEV sandwich victim** (9,500 bps slippage forced by MEV bot) | SlowMist/Bitget $540M stat | `max_slippage` | critical |
 | **27** | **MCP context pollution** (poisoned server injects unknown program) | SlowMist report 2026 | `allowed_programs` | high |
 | **28** | **Agent-chain laundering** (multi-hop through unlisted intermediary) | SlowMist "Agent Smuggling" | `allowed_programs` | high |
+| **29** | **Drip drain** — 20 × 0.5 SOL; each tx passes per-tx limit, cumulative 2.5 SOL trips 2 SOL session cap | Novel / this analysis | `session_spend_cap` | critical |
 
 ## Project Structure
 

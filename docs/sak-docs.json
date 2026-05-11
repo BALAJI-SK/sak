@@ -103,7 +103,7 @@
       ],
       "tech": ["LiteSVM 0.11", "Rust stable", "serde_yaml rule engine", "tokio"],
       "metrics": {
-        "test_suite": "29/29 evil corpus + pack-load tests passing",
+        "test_suite": "30/30 evil corpus + pack-load tests passing",
         "rules_active": 7,
         "evaluation_time": "25–70ms",
         "on_chain_cost_for_rejection": "$0.00"
@@ -506,7 +506,7 @@
     "description": "20 malicious transaction patterns. All 20 blocked by Guardian out of the box. Run with: cargo test -p sak-guardian",
     "test_file": "crates/sak-guardian/tests/evil_corpus.rs",
     "test_command": "cargo test -p sak-guardian",
-    "expected_output": "test result: ok. 29 passed; 0 failed",
+    "expected_output": "test result: ok. 30 passed; 0 failed",
     "attacks": [
       { "id": 1,  "fn": "blocks_99_percent_slippage",           "name": "99% slippage swap",                "description": "Agent declares 9900 bps slippage tolerance.",                                                  "rule": "max_slippage",       "severity": "critical", "trigger": "TxMeta { slippage_bps: Some(9900) }" },
       { "id": 2,  "fn": "blocks_wrong_token_mint",              "name": "Wrong token mint (fake USDC)",     "description": "Transfer invoking FaKe1111... program — not on whitelist.",                                 "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::from_str(\"FaKe1111111111111111111111111111111111111111\")" },
@@ -672,7 +672,7 @@
       { "phase": 9, "name": "Demo recording",                "status": "pending" },
       { "phase": 10,"name": "Deployment + submission",       "status": "pending" }
     ],
-    "test_suite": "29/29 evil corpus + pack-load tests passing",
+    "test_suite": "30/30 evil corpus + pack-load tests passing",
     "hackathon": "Colosseum Frontier — deadline May 11, 2026"
   },
 

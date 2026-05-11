@@ -555,6 +555,52 @@ fn blocks_agent_chain_laundering_unknown_intermediary() {
     assert_reject(&result, "allowed_programs");
 }
 
+// ── SessionSpendCheck — drip drain detection ──────────────────────────────────
+
+/// 29. Drip drain — 20 transfers of 0.5 SOL each = 10 SOL total.
+///     Each individual tx passes `drain_check` (0.5 SOL < 1 SOL limit).
+///     `session_spend_check` catches the attack after the cumulative total
+///     crosses the 2 SOL session cap (on the 5th tx: 2.5 SOL > 2 SOL cap).
+#[test]
+fn blocks_drip_drain_cumulative() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let attacker = Address::new_unique();
+
+    let guardian = Guardian::with_rules(vec![
+        // Individual drain limit: 1 SOL per tx — each 0.5 SOL tx passes this.
+        Rule::DrainCheck {
+            name: "max_account_drain".into(),
+            max_lamports: 1_000_000_000,
+        },
+        // Session cap: 2 SOL total — should fire on the 5th tx.
+        Rule::SessionSpendCheck {
+            name: "session_spend_cap".into(),
+            max_session_lamports: 2_000_000_000,
+        },
+    ]);
+
+    // First 4 txs (4 × 0.5 SOL = 2 SOL): should all be allowed.
+    for i in 1..=4 {
+        let tx = transfer_tx(&svm, &payer, &attacker, 500_000_000);
+        let result = eval(&guardian, &tx, &Default::default());
+        match result {
+            Decision::Allow => {}
+            Decision::Reject { rule, reason } => {
+                panic!("tx {i} should be allowed but got Reject({rule}: {reason})")
+            }
+        }
+    }
+
+    // 5th tx (total: 2.5 SOL > 2 SOL cap): must be rejected.
+    let tx = transfer_tx(&svm, &payer, &attacker, 500_000_000);
+    let result = eval(&guardian, &tx, &Default::default());
+    assert_reject(&result, "session_spend_cap");
+
+    // Verify the session counter is accessible.
+    assert!(guardian.session_spend_lamports() > 2_000_000_000);
+}
+
 /// `Guardian::stats()` should report exact counts, not a marketing number.
 #[test]
 fn stats_reports_truthful_counts() {
