@@ -7,6 +7,7 @@
 <meta name="sak-api-base" content="https://race-server-production-c5c9.up.railway.app" />
 <!-- Waitlist / marketing site (sak_ui-1 on Cloudflare). Under /guardian/ on same host, code also uses origin + "/" -->
 <meta name="sak-landing-url" content="https://sak-d89.pages.dev" />
+<link rel="icon" href="./assets/final_logo.png" type="image/png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -115,12 +116,10 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
      SCREEN 1: GATE
      ============================================================ -->
 <div id="gate-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0a0f;padding:24px;transition:opacity 0.4s ease">
-  <div style="width:100%;max-width:480px;background:#12121a;border:1px solid #1e1e2e;border-radius:16px;padding:40px">
-    <!-- Logo -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <div style="width:10px;height:10px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px 0 #00ff88;animation:sak-pulse 2s cubic-bezier(0.2,0.8,0.2,1) infinite"></div>
-      <span style="font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#ffffff">SAK</span>
-      <span style="font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#00ff88">Guardian</span>
+  <div style="width:100%;max-width:520px;background:#12121a;border:1px solid #1e1e2e;border-radius:16px;padding:40px">
+    <!-- Logo — source: demo/assets/final_logo_full_name.png (bundled to ./assets/) -->
+    <div style="display:flex;align-items:center;margin-bottom:10px">
+      <img src="./assets/final_logo_full_name.png" alt="Solana Agent Kernel — SAK Guardian" width="400" height="80" style="height:56px;width:auto;max-width:100%;object-fit:contain;display:block" />
     </div>
     <div style="font-size:14px;color:#8888aa;margin-bottom:28px">Give AI agents a pre-sign kill switch</div>
 
@@ -191,9 +190,8 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
     <div style="display:flex;align-items:center;gap:12px">
       <span class="sak-dot sak-dot--pulse" style="width:10px;height:10px"></span>
       <div>
-        <div style="display:flex;align-items:baseline;gap:8px">
-          <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">SAK</span>
-          <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em;color:var(--sak-green)">Guardian</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          <img src="./assets/final_logo_full_name.png" alt="Solana Agent Kernel — SAK Guardian" width="400" height="80" style="height:36px;width:auto;max-width:min(320px,42vw);object-fit:contain;vertical-align:middle;display:block" />
         </div>
         <div style="font-size:12px;color:var(--fg-2);margin-top:2px">Live safety log — every transaction simulated before signing</div>
       </div>
@@ -202,9 +200,9 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
     <div id="dashHeaderActions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span id="demoModeBadge" style="display:none;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:8px;font-size:11px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;background:rgba(255,153,0,0.10);border:1px solid rgba(255,153,0,0.35);color:var(--sak-orange)">Demo Mode</span>
       <a id="landingSiteLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--fg-2);text-decoration:none;border:1px solid var(--border);padding:8px 14px;border-radius:8px;transition:all 0.15s ease">Landing page</a>
-      <button type="button" id="stopDemoBtn" title="Stop the AI loop, clear your API key from this tab, and disconnect Phantom"
+      <button type="button" id="stopDemoBtn" title="Kill the agent: stop the AI loop, clear your API key from this tab, and disconnect Phantom"
         style="font-size:12px;font-weight:600;letter-spacing:0.03em;font-family:var(--font-sans);cursor:pointer;border:1px solid var(--sak-red-border);background:var(--sak-red-soft);color:var(--sak-red);padding:8px 14px;border-radius:8px;transition:all 0.15s ease">
-        Stop demo
+        Kill agent
       </button>
     </div>
     <div id="headerPills" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"></div>
@@ -246,50 +244,56 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
           <div id="walletInfo" style="font-family:var(--font-mono);font-size:10px;color:var(--sak-green);margin-top:4px;display:none"></div>
         </div>
       </div>
-      <!-- Squads Policy Panel -->
-      <div id="squadsPolicy" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <span style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Layer 2 · Squads Policy</span>
-          <span id="squadsBadge" style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.4);color:var(--sak-blue)">Initializing…</span>
+      <!-- Guardian Rules Panel -->
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+          <span style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Guardian Security Rules</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--sak-green)">20/20</span>
         </div>
-        <div id="squadsContent">
-          <div style="height:32px;background:var(--bg);border-radius:6px;animation:sak-pulse 1.5s ease infinite;opacity:0.5"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:var(--font-mono)">
+          <div style="color:var(--fg)">max_slippage</div>
+          <div style="color:var(--fg-2);text-align:right">200 bps</div>
+          <div style="color:var(--fg)">allowed_programs</div>
+          <div style="color:var(--fg-2);text-align:right">10 programs</div>
+          <div style="color:var(--fg)">max_account_drain</div>
+          <div style="color:var(--fg-2);text-align:right">1 SOL</div>
+          <div style="color:var(--fg)">max_accounts</div>
+          <div style="color:var(--fg-2);text-align:right">20 accounts</div>
+          <div style="color:var(--fg)">max_compute_units</div>
+          <div style="color:var(--fg-2);text-align:right">1.4M CU</div>
+          <div style="color:var(--fg)">max_priority_fee</div>
+          <div style="color:var(--fg-2);text-align:right">1M µlamports</div>
+          <div style="color:var(--fg)">min_transfer_value</div>
+          <div style="color:var(--fg-2);text-align:right">1 lamport</div>
         </div>
       </div>
 
       <!-- Architecture SVG -->
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
-        <div style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:12px">Two-Layer Safety Stack</div>
-        <svg viewBox="0 0 260 186" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block">
+        <div style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:12px">SAK Guardian Flow</div>
+        <svg viewBox="0 0 260 140" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block">
           <!-- AI Agent -->
           <rect x="80" y="0" width="100" height="32" rx="6" fill="#12121a" stroke="#7c3aed" stroke-width="1.5"/>
           <text x="130" y="12" fill="#8888aa" font-size="8" text-anchor="middle" font-family="monospace" font-weight="600" letter-spacing="1">AI AGENT</text>
           <text x="130" y="24" fill="#c0c0e0" font-size="9" text-anchor="middle" font-family="monospace">intent generated</text>
           <!-- Arrow down -->
-          <line x1="130" y1="32" x2="130" y2="48" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown)"/>
-          <!-- Layer 1 box -->
+          <line x1="130" y1="32" x2="130" y2="48" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown2)"/>
+          <!-- Guardian box -->
           <rect x="10" y="48" width="240" height="56" rx="8" fill="#12121a" stroke="#ff9900" stroke-width="1.5"/>
           <circle cx="26" cy="62" r="4" fill="#ff9900"/>
-          <text x="36" y="66" fill="#ff9900" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">LAYER 1 — SAK GUARDIAN</text>
-          <text x="16" y="80" fill="#8888aa" font-size="8.5" font-family="monospace">LiteSVM pre-sign simulation · 7 safety rules</text>
+          <text x="36" y="66" fill="#ff9900" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">SAK GUARDIAN</text>
+          <text x="16" y="80" fill="#8888aa" font-size="8.5" font-family="monospace">LiteSVM pre-sign simulation · 20 safety rules</text>
           <text x="16" y="93" fill="#8888aa" font-size="8.5" font-family="monospace">Off-chain · &lt;50ms · zero on-chain cost</text>
-          <!-- Arrow down -->
-          <line x1="130" y1="104" x2="130" y2="120" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown)"/>
-          <text x="148" y="115" fill="#54546a" font-size="8" font-family="monospace">if all rules pass</text>
-          <!-- Layer 2 box -->
-          <rect x="10" y="120" width="240" height="56" rx="8" fill="#12121a" stroke="#3b82f6" stroke-width="1.5"/>
-          <circle cx="26" cy="134" r="4" fill="#3b82f6"/>
-          <text x="36" y="138" fill="#3b82f6" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">LAYER 2 — SQUADS POLICY</text>
-          <text x="16" y="152" fill="#8888aa" font-size="8.5" font-family="monospace">Smart account · Spending limit $10 USDC/tx</text>
-          <text x="16" y="165" fill="#8888aa" font-size="8.5" font-family="monospace">On-chain enforced · SQDS4…</text>
           <!-- Arrow marker -->
           <defs>
-            <marker id="arrowDown" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
+            <marker id="arrowDown2" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
               <path d="M2,2 L4,6 L6,2" stroke="#2a2a3e" stroke-width="1.2" fill="none"/>
             </marker>
           </defs>
+          <!-- Arrow: Guardian → chain -->
+          <line x1="130" y1="104" x2="130" y2="118" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown2)"/>
           <!-- Chain label -->
-          <text x="130" y="183" fill="#54546a" font-size="8" font-family="monospace" text-anchor="middle">↓ Solana blockchain</text>
+          <text x="130" y="134" fill="#54546a" font-size="8" font-family="monospace" text-anchor="middle">Solana blockchain</text>
         </svg>
       </div>
     </div>
@@ -602,57 +606,6 @@ document.getElementById('stopDemoBtn').addEventListener('click', () => {
 });
 
 // ============================================================
-// SQUADS POLICY
-// ============================================================
-let squadsData = null;
-
-function renderSquadsPolicy(data) {
-  const badge = document.getElementById('squadsBadge');
-  const content = document.getElementById('squadsContent');
-  if (!content) return;
-
-  if (!data || data.status !== 'created') {
-    if (badge) { badge.textContent = 'Offline'; badge.style.background = 'rgba(136,136,170,0.12)'; badge.style.borderColor = 'rgba(136,136,170,0.3)'; badge.style.color = 'var(--fg-2)'; }
-    content.innerHTML = '<div style="font-size:12px;color:var(--fg-2)">Squads API unavailable — race-server offline</div>';
-    return;
-  }
-  squadsData = data;
-  if (badge) { badge.textContent = 'Active'; badge.style.background = 'rgba(59,130,246,0.15)'; badge.style.borderColor = 'rgba(59,130,246,0.4)'; badge.style.color = 'var(--sak-blue)'; }
-  const short = data.smart_account.slice(0,4) + '…' + data.smart_account.slice(-4);
-  content.innerHTML =
-    '<div style="display:flex;flex-direction:column;gap:6px">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between">' +
-        '<span style="font-size:11px;color:var(--fg-2)">Smart Account</span>' +
-        '<span style="font-family:var(--font-mono);font-size:11px;color:var(--fg)">' + short + '</span>' +
-      '</div>' +
-      '<div style="display:flex;align-items:center;justify-content:space-between">' +
-        '<span style="font-size:11px;color:var(--fg-2)">Spending Limit</span>' +
-        '<span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--sak-blue)">$' + data.spending_limit_usdc.toFixed(0) + ' USDC/tx</span>' +
-      '</div>' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-top:4px">' +
-        '<a href="' + data.explorer_url + '" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:5px 0;border-radius:6px;border:1px solid var(--border);font-size:10px;font-weight:600;color:var(--fg-2);text-decoration:none;font-family:var(--font-mono)">Solscan ↗</a>' +
-        '<a href="' + data.squads_app_url + '" target="_blank" rel="noopener" style="flex:1;text-align:center;padding:5px 0;border-radius:6px;border:1px solid rgba(59,130,246,0.35);font-size:10px;font-weight:600;color:var(--sak-blue);text-decoration:none;font-family:var(--font-mono)">Squads ↗</a>' +
-      '</div>' +
-      '<div style="margin-top:4px;font-size:10px;color:var(--fg-3);line-height:1.4">' + data.api_note + '</div>' +
-    '</div>';
-}
-
-async function initSquadsPolicy() {
-  try {
-    const res = await fetch(API_BASE + '/squads/create-agent-wallet', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent_name: 'SAK Demo Agent', spending_limit_usdc: 10 })
-    });
-    if (!res.ok) throw new Error('http ' + res.status);
-    const data = await res.json();
-    renderSquadsPolicy(data);
-  } catch(_) {
-    renderSquadsPolicy(null);
-  }
-}
-
-// ============================================================
 // DASHBOARD STATE
 // ============================================================
 let txLog = [];
@@ -694,7 +647,8 @@ const FALLBACK_ATTACKS = [
   {description:'maximize swap output',slippage_bps:9900,amount_lamports:100000000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']},
   {description:'drain entire balance',slippage_bps:0,amount_lamports:9950000000,program_ids:['11111111111111111111111111111111']},
   {description:'unknown aggregator program',slippage_bps:150,amount_lamports:1000000,program_ids:['Ax7fK9mN2pQrS4tU6vW8xYzAb1cD2eHackProgram']},
-  {description:'maximum compute units',slippage_bps:200,amount_lamports:100000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'],compute_units:1500000}
+  {description:'maximum compute units',slippage_bps:200,amount_lamports:100000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'],compute_units:1500000},
+  {description:'large Jupiter swap within guardian limits',slippage_bps:150,amount_lamports:250000000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']}
 ];
 
 // ============================================================
@@ -871,7 +825,7 @@ function animateFlow(lastDecision) {
 
   function tick() {
     let html = '';
-    const a0 = stage >= 0, a1 = stage >= 1, a2 = stage >= 2, a3 = stage >= 3;
+    const a0 = stage >= 0, a1 = stage >= 1, a2 = stage >= 2;
 
     // Node 1: AI Agent
     html += flowNodeHTML('AI Agent', 'intent', 'bot', 'var(--sak-purple)', a0, stage === 0);
@@ -886,21 +840,16 @@ function animateFlow(lastDecision) {
     if (isBlock) {
       // Segment 2: Guardian → Blocked
       html += flowSegHTML(a2, 'var(--sak-red)', false, particlePos);
-      // Node 3: Blocked (replaces Squads)
+      // Node 3: Blocked
       html += flowNodeHTML('Blocked', a2 ? 'zero cost' : '—', 'x', 'var(--sak-red)', a2, stage === 2);
-      // Segment 3 + Node 4: dimmed (never reached)
+      // Segment 3: dimmed (Solana never reached)
       html += flowSegHTML(false, 'var(--border)', false, 0);
-      html += flowNodeHTML('Solana', 'chain', 'circle', '#9945ff', false, false);
+      html += flowNodeHTML('Solana', 'skipped', 'circle', '#54546a', false, false);
     } else {
-      // Segment 2: Guardian → Squads (Layer 2)
-      html += flowSegHTML(a2, 'var(--sak-blue)', stage === 2, particlePos);
-      // Node 3: Squads Policy
-      const sColor = a3 ? 'var(--sak-green)' : 'var(--sak-blue)';
-      html += flowNodeHTML('Squads', a2 ? (stage === 2 ? 'policy...' : '$10 ✓') : '$10 cap', 'lock', sColor, a2, stage === 2);
-      // Segment 3: Squads → Chain
-      html += flowSegHTML(a3, 'var(--sak-green)', stage === 3, particlePos);
-      // Node 4: Solana
-      html += flowNodeHTML('Solana', a3 ? 'sent ✓' : 'chain', 'circle', '#9945ff', a3, stage === 3);
+      // Segment 2: Guardian → Solana
+      html += flowSegHTML(a2, 'var(--sak-green)', stage === 2, particlePos);
+      // Node 3: Solana
+      html += flowNodeHTML('Solana', a2 ? 'sent ✓' : 'chain', 'circle', '#9945ff', a2, stage === 2);
     }
 
     frow.innerHTML = html;
@@ -910,11 +859,8 @@ function animateFlow(lastDecision) {
   const timers = [];
   timers.push(setTimeout(() => { stage = 1; particlePos = 0; tick(); }, 100));
   timers.push(setTimeout(() => { stage = 2; particlePos = 0.5; tick(); }, 800));
-  if (!isBlock) {
-    timers.push(setTimeout(() => { stage = 3; particlePos = 1; tick(); }, 1500));
-  }
 
-  flowAnimationId = setTimeout(() => { stage = 0; tick(); }, isBlock ? 2300 : 2900);
+  flowAnimationId = setTimeout(() => { stage = 0; tick(); }, isBlock ? 2000 : 2400);
 }
 
 // ============================================================
@@ -990,7 +936,7 @@ function addLogCard(entry) {
       ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg)">Rule: <span style="color:var(--sak-yellow)">' + escapeHtml(entry.rule || '—') + '</span></div>' +
         (entry.reason ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">' + escapeHtml(entry.reason) + '</div>' : '') +
         lossHtml
-      : '<div style="font-family:var(--font-mono);font-size:12px;color:var(--sak-green)">All 7 rules passed ✓</div>' +
+      : '<div style="font-family:var(--font-mono);font-size:12px;color:var(--sak-green)">All 20 rules passed ✓</div>' +
         '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">Simulation matched expected output</div>' +
         (entry.sig ? '<a href="https://explorer.solana.com/tx/' + encodeURIComponent(entry.sig) + '?cluster=devnet" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--sak-blue);text-decoration:none">→ View on explorer ↗</a>' : '')
     ) +
@@ -1086,10 +1032,8 @@ function addTraceCard(entry) {
         node('bot', 'Agent', 'intent', 'var(--sak-purple)', true) +
         seg(false, 'var(--sak-orange)') +
         node('shield', 'Guardian', 'LiteSVM', 'var(--sak-orange)', false) +
-        seg(false, isBlock ? 'var(--sak-red)' : 'var(--sak-blue)') +
-        node(isBlock ? 'x' : 'lock', isBlock ? 'Blocked' : 'Squads', isBlock ? 'zero cost' : '$10 cap', isBlock ? 'var(--sak-red)' : 'var(--sak-blue)', false) +
-        seg(false, isBlock ? 'transparent' : 'var(--sak-green)') +
-        node('circle', 'Solana', isBlock ? 'skipped' : 'chain', '#9945ff', false) +
+        seg(false, isBlock ? 'var(--sak-red)' : 'var(--sak-green)') +
+        node(isBlock ? 'x' : 'circle', isBlock ? 'Blocked' : 'Solana', isBlock ? 'zero cost' : 'broadcast', isBlock ? 'var(--sak-red)' : '#9945ff', false) +
       '</div>' +
       '<div style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:var(--fg-2);min-height:16px;opacity:0;transition:opacity .3s" class="trace-outcome"></div>' +
     '</div>';
@@ -1097,8 +1041,8 @@ function addTraceCard(entry) {
   container.insertBefore(card, container.firstChild);
   if (container.children.length > 3) container.removeChild(container.lastChild);
 
-  // Animate stages — trace-line children: [node0, seg1, node2, seg3, node4, seg5, node6]
-  // node0=Agent, node2=Guardian, node4=Squads/Blocked, node6=Solana
+  // Animate stages — trace-line children: [node0, seg1, node2, seg3, node4]
+  // node0=Agent, node2=Guardian, node4=Blocked/Solana
   setTimeout(() => {
     const tl = card.querySelector('.trace-line');
     if (!tl) return;
@@ -1110,30 +1054,20 @@ function addTraceCard(entry) {
       tl.children[2] = createNodeHTML(tl.children[2], 'Guardian', 'sim...', 'var(--sak-orange)', true);
       reLucide();
     }, 350));
-    // Stage 2: Guardian result + Squads/Blocked
+    // Stage 2: Guardian result + final state
     stageTimeouts.push(setTimeout(() => {
       const guardColor = isBlock ? 'var(--sak-red)' : 'var(--sak-green)';
       tl.children[2] = createNodeHTML(tl.children[2], 'Guardian', totalMs + 'ms', guardColor, true);
       const seg3 = tl.children[3].querySelector('div');
-      const seg3Color = isBlock ? 'var(--sak-red)' : 'var(--sak-blue)';
+      const seg3Color = isBlock ? 'var(--sak-red)' : 'var(--sak-green)';
       if (seg3) { seg3.style.background = seg3Color; seg3.style.backgroundImage = 'none'; seg3.style.boxShadow = '0 0 8px -1px ' + seg3Color; }
       if (isBlock) {
         tl.children[4] = createNodeHTML(tl.children[4], 'Blocked', 'zero cost', 'var(--sak-red)', true);
       } else {
-        tl.children[4] = createNodeHTML(tl.children[4], 'Squads', 'policy...', 'var(--sak-blue)', true);
+        tl.children[4] = createNodeHTML(tl.children[4], 'Solana', 'broadcast', '#9945ff', true);
       }
       reLucide();
     }, 750));
-    // Stage 3: Squads → Chain (only if allowed)
-    if (!isBlock) {
-      stageTimeouts.push(setTimeout(() => {
-        tl.children[4] = createNodeHTML(tl.children[4], 'Squads', '$10 ✓', 'var(--sak-green)', true);
-        const seg5 = tl.children[5].querySelector('div');
-        if (seg5) { seg5.style.background = 'var(--sak-green)'; seg5.style.backgroundImage = 'none'; seg5.style.boxShadow = '0 0 8px -1px var(--sak-green)'; }
-        tl.children[6] = createNodeHTML(tl.children[6], 'Solana', 'broadcast', '#9945ff', true);
-        reLucide();
-      }, 1150));
-    }
     stageTimeouts.push(setTimeout(() => {
       const oc = card.querySelector('.trace-outcome');
       if (!oc) return;
@@ -1144,7 +1078,7 @@ function addTraceCard(entry) {
         oc.innerHTML = '<span style="color:var(--sak-red);font-weight:700">✕ ' + escapeHtml(rule) + '</span><span> — ' + escapeHtml(reason) + '</span>' +
           (entry.simulated_loss_usd ? '<span style="color:var(--sak-green);font-weight:700;margin-left:8px">$' + entry.simulated_loss_usd.toFixed(2) + ' saved</span>' : '');
       } else {
-        oc.innerHTML = '<span style="color:var(--sak-green);font-weight:700">✓ Squads → broadcast</span><span> — sig ' + sig + '</span>';
+        oc.innerHTML = '<span style="color:var(--sak-green);font-weight:700">✓ Allowed → broadcast</span><span> — sig ' + sig + '</span>';
       }
       card.style.boxShadow = '0 0 0 1px ' + (isBlock ? 'rgba(255,51,102,0.85)' : 'rgba(0,255,136,0.85)') + ', 0 0 32px -6px ' + (isBlock ? 'rgba(255,51,102,0.85)' : 'rgba(0,255,136,0.85)');
       setTimeout(() => { card.style.boxShadow = 'none'; }, 1000);
@@ -1333,7 +1267,7 @@ async function _agentLoopBody() {
     document.getElementById('agentStatusText').style.color = 'var(--sak-orange)';
     await new Promise(r => setTimeout(r, 300 + rand(0, 400)));
     if (isAttack) {
-      const idx = Math.floor((txCount / 2) % 4);
+      const idx = Math.floor((txCount / 2) % 5);
       intent = FALLBACK_ATTACKS[idx];
     } else {
       intent = FALLBACK_VALID;
@@ -1362,7 +1296,7 @@ async function _agentLoopBody() {
       }
       // Parse error or other — use scripted fallback
       if (isAttack) {
-        const idx = Math.floor((txCount / 2) % 4);
+        const idx = Math.floor((txCount / 2) % 5);
         intent = FALLBACK_ATTACKS[idx];
       } else {
         intent = FALLBACK_VALID;
@@ -1409,7 +1343,7 @@ async function _agentLoopBody() {
     st.innerHTML = '🤖 Blocked: <span style="color:var(--sak-yellow)">' + escapeHtml(entry.rule || '—') + '</span>';
     st.style.color = 'var(--sak-red)';
   } else {
-    st.textContent = 'All 7 rules passed ✓';
+    st.textContent = 'All 20 rules passed ✓';
     st.style.color = 'var(--sak-green)';
   }
 }
@@ -1447,8 +1381,7 @@ function initDashboard() {
   agentLoop(); // first run immediately
   agentLoopInterval = setInterval(agentLoop, 8000);
 
-  // Initialize Squads Layer 2
-  initSquadsPolicy();
+
 
   if (typeof window.__sakStartSlotWs === 'function') window.__sakStartSlotWs();
 
@@ -1514,7 +1447,7 @@ gateKey.focus();
 
 // ============================================================
 // YELLOWSTONE SLOT COUNTER — live devnet slot via race-server WS
-// (restarted when dashboard opens; torn down on Stop demo)
+// (restarted when dashboard opens; torn down on Kill agent)
 // ============================================================
 (function setupSlotWebSocket() {
   window.__sakStartSlotWs = function () {

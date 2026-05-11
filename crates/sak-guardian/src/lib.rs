@@ -55,9 +55,13 @@ impl Guardian {
         let sim_result = self.simulator.simulate(tx);
         match sim_result {
             Ok(sim) => {
-                // Convert simulation result + original tx to TxView for rule evaluation
-                let view = TxView::from_tx_and_sim(tx, &sim);
-                evaluate(&self.rules, &view, meta)
+                match TxView::from_tx_and_sim(tx, &sim) {
+                    Ok(view) => evaluate(&self.rules, &view, meta),
+                    Err(e) => Decision::Reject {
+                        rule: "pre_sign_simulation".into(),
+                        reason: e,
+                    },
+                }
             }
             Err(e) => {
                 let human_reason = parse_simulation_error(&e);
@@ -85,16 +89,17 @@ impl Guardian {
 
 /// Parse raw simulation error into human-readable English.
 fn parse_simulation_error(err: &str) -> String {
-    if err.contains("InsufficientFundsForRent") {
+    let trimmed = err.trim();
+    if trimmed.starts_with("not a legacy tx") {
+        "Legacy transaction required — V0 messages not supported".into()
+    } else if trimmed.starts_with("InsufficientFundsForRent") {
         "Insufficient funds — transaction would leave account below rent minimum".into()
-    } else if err.contains("insufficient funds") || err.contains("InsufficientFunds") {
+    } else if trimmed.starts_with("insufficient funds") || trimmed.starts_with("InsufficientFunds") {
         "Insufficient balance to complete transaction".into()
-    } else if err.contains("InvalidAccountData") {
+    } else if trimmed.starts_with("InvalidAccountData") {
         "Invalid account data — possible wrong token address".into()
-    } else if err.contains("ProgramFailedToComplete") {
+    } else if trimmed.starts_with("ProgramFailedToComplete") {
         "Program execution failed — transaction would revert on-chain".into()
-    } else if err.contains("would exceed max") || err.contains("exceeds") {
-        "Transaction exceeds account or program limits".into()
     } else {
         "Transaction would fail on-chain — blocked before signing".into()
     }

@@ -15,5 +15,9 @@ cp "${ROOT}/index.html" "${OUT}/"
 if [[ -d "${ROOT}/fonts" ]]; then
   cp -R "${ROOT}/fonts/." "${OUT}/fonts/"
 fi
+if [[ -d "${ROOT}/demo/assets" ]]; then
+  mkdir -p "${OUT}/assets"
+  cp -R "${ROOT}/demo/assets/." "${OUT}/assets/"
+fi
 echo "Static bundle ready: ${OUT}"
 echo "Cloudflare: npx wrangler pages deploy \"${OUT}\" --project-name=\"\${CF_PAGES_PROJECT:-sak}\""

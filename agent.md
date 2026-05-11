@@ -2,6 +2,8 @@
 
 > Full codebase reference for AI agents and developers. Read this before touching any file.
 
+**API docs live in `docs/api/`** — sak-sdk, sak-guardian, and race-server endpoints with types, examples, and YAML schemas. Judges skim these.
+
 ---
 
 ## What SAK Is
@@ -919,5 +921,19 @@ txLog = []; txCount = 0; allowedCount = 0; blockedCount = 0;
 totalPrevented = 0; feedbackCorrect = 0; feedbackWrong = 0; falsePositives = 0;
 ```
 This prevents stale counts when the user stops the demo and restarts it (previously counters persisted across demo sessions).
+
+## Gotcha 26 — Visual polish applied to `demo/race-ui/index.html`
+
+A full craft-and-polish pass was applied using frontend-design-guidelines:
+
+- **No hardcoded colors outside CSS variables.** All inline `#0a0a0f`, `#12121a`, `#1e1e2e`, `#8888aa`, `#00ff88`, `#ff3366` in gate screen markup replaced with `var(--bg)`, `var(--surface)`, `var(--border)`, `var(--fg-2)`, `var(--sak-green)`, `var(--sak-red)`, etc.
+- **`transition: all` → specific property transitions.** Every instance of `transition: all 0.15s ease` replaced with explicit properties (e.g. `border-color 150ms var(--ease-out), color 150ms var(--ease-out)`). Never animate properties you didn't plan to.
+- **Focus rings on all interactive elements.** Global `button:focus-visible, a:focus-visible { outline:2px solid var(--sak-green); outline-offset:2px; }` ensures keyboard navigation is visible. Removed inline `onmouseover`/`onmouseout` JS handlers in favor of CSS `:hover` rules (`#demoBtn:hover`, `.fb-wrong:hover`, `#stopDemoBtn:hover`, etc.).
+- **Animation tier alignment.** Durations follow the tier system: 100ms micro (hover feedback), 150ms short (button transitions), 200–250ms medium (trace/log card entrance), 300ms (page transitions, trace outcome fade). `sak-pulse` scale reduced from `1.15` to `1.1`. Entrance translate distances halved (`24px` → `12px`, `8px` → `6px`).
+- **`prefers-reduced-motion` support.** Global override: `@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:0.01ms !important; … } }`.
+- **Tabular-nums for all dynamic numbers.** `font-variant-numeric:tabular-nums` added to every number display (SOL price, TX count, ms timing, slot counter, prevented value, log entries count, accuracy). Prevents digit jitter on updates.
+- **Fixed `border-radius:999` → `border-radius:999px`** (~9 places used `999` instead of `999px`).
+- **No `<div onClick>` anywhere.** All interactive elements use `<button>` or `<a>` with proper attributes.
+- **Input `::placeholder` color** set to `var(--fg-3)` for proper contrast ratio.
 
 ---

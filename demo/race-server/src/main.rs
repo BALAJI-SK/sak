@@ -1,7 +1,7 @@
 use axum::{
     body::{Body, Bytes},
     extract::{ws::WebSocket, ws::WebSocketUpgrade, DefaultBodyLimit, Json, State},
-    http::{header, HeaderMap, HeaderValue, Method, StatusCode},
+    http::{header, request::Parts, HeaderMap, HeaderValue, Method, StatusCode},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
@@ -51,6 +51,18 @@ struct AppState {
     price: SharedPriceCache,
 }
 
+fn sak_demo_pages_origin(origin: &str) -> bool {
+    origin == "https://sak-devnet-test.pages.dev"
+        || origin.ends_with(".sak-devnet-test.pages.dev")
+        || origin == "https://sak-d89.pages.dev"
+        || origin.ends_with(".sak-d89.pages.dev")
+        || origin == "https://balaji-sk.github.io"
+}
+
+fn localhost_dev_origin(origin: &str) -> bool {
+    origin.starts_with("http://localhost:") || origin.starts_with("http://127.0.0.1:")
+}
+
 fn build_cors_layer() -> CorsLayer {
     let raw = std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_default();
     if raw.is_empty() || raw == "*" {
@@ -60,23 +72,34 @@ fn build_cors_layer() -> CorsLayer {
             .allow_headers(Any);
     }
 
-    let origins: Vec<HeaderValue> = raw
+    let explicit: Vec<String> = raw
         .split(',')
-        .map(|s| s.trim())
+        .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
-        .filter_map(|s| HeaderValue::from_str(s).ok())
         .collect();
 
-    if origins.is_empty() {
+    if explicit.is_empty() {
         return CorsLayer::new()
             .allow_origin(Any)
             .allow_methods(Any)
             .allow_headers(Any);
     }
 
+    let explicit = Arc::new(explicit);
     CorsLayer::new()
-        .allow_origin(AllowOrigin::list(origins))
-        .allow_methods([Method::GET, Method::POST])
+        .allow_origin(AllowOrigin::predicate({
+            let explicit = Arc::clone(&explicit);
+            move |origin: &HeaderValue, _parts: &Parts| {
+                let Ok(s) = origin.to_str() else {
+                    return false;
+                };
+                if explicit.iter().any(|e| e == s) {
+                    return true;
+                }
+                sak_demo_pages_origin(s) || localhost_dev_origin(s)
+            }
+        }))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers(Any)
 }
 
@@ -98,7 +121,7 @@ async fn main() {
         )
         .init();
 
-    let (tx, _) = broadcast::channel::<String>(100);
+    let (tx, _) = broadcast::channel::<String>(1024);
     let state = AppState {
         feedback: Arc::new(Mutex::new(Vec::new())),
         price: Arc::new(Mutex::new(PriceCache::new())),
@@ -202,7 +225,7 @@ async fn main() {
         .route("/feedback", post(feedback_handler))
         .route("/feedback/summary", get(feedback_summary_handler))
         .route("/evaluate", post(evaluate_handler))
-        .route("/squads/create-agent-wallet", post(squads_create_wallet_handler))
+
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(cors)
         .with_state(state);
@@ -567,106 +590,6 @@ async fn evaluate_handler(Json(req): Json<IntentRequest>) -> Json<EvaluateRespon
         }
     };
 
-    // Layer 2 — Squads spending limit (Guardian already allowed).
-    const SQUADS_LAMPORTS_CAP: u64 = 10_000_000;
-    if matches!(&decision, Decision::Allow) && amount_lamports > SQUADS_LAMPORTS_CAP {
-        info!(
-            elapsed_ms,
-            amount_lamports,
-            cap = SQUADS_LAMPORTS_CAP,
-            "Squads Layer 2 → BLOCK (Guardian ALLOW)"
-        );
-        resp = EvaluateResponse {
-            decision: "rejected".into(),
-            rule: Some("squads_spending_limit".into()),
-            reason: Some("10 USDC/tx cap exceeded".into()),
-            attack_type: "Layer 2 — Squads blocked (Guardian allowed)".into(),
-            severity: "high".into(),
-            simulation_time_ms: elapsed_ms,
-        };
-    }
-
     Json(resp)
 }
 
-// ============================================================
-// SQUADS SMART ACCOUNT — Layer 2 spending-limit policy
-// ============================================================
-#[derive(Deserialize)]
-struct SquadsWalletRequest {
-    agent_name: Option<String>,
-    spending_limit_usdc: Option<f64>,
-}
-
-#[derive(Serialize)]
-struct SquadsWalletResponse {
-    status: String,
-    smart_account: String,
-    config_authority: String,
-    spending_limit_usdc: f64,
-    spending_limit_atoms: u64,
-    program_id: String,
-    explorer_url: String,
-    squads_app_url: String,
-    api_note: String,
-    sdk_snippet: String,
-}
-
-async fn squads_create_wallet_handler(
-    Json(req): Json<SquadsWalletRequest>,
-) -> Json<SquadsWalletResponse> {
-    let spending_limit = req.spending_limit_usdc.unwrap_or(10.0);
-    let agent_name = req.agent_name.unwrap_or_else(|| "SAK Demo Agent".into());
-    // Real Squads multisig created on devnet via scripts/create-squads-account.ts
-    let smart_account = "HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX".to_string();
-    let config_authority = "2bzdLiLZdKRgb1zMdndTbDEgtbPwLepfjNPPCQrawaoZ".to_string();
-    let program_id = "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf".to_string();
-    let spending_limit_atoms = (spending_limit * 1_000_000.0) as u64; // USDC 6 decimals
-
-    info!(
-        %agent_name,
-        spending_limit_usdc = spending_limit,
-        %smart_account,
-        "Squads create-agent-wallet called (demo)"
-    );
-
-    let sdk_snippet = format!(
-        r#"// @squads-protocol/multisig
-import * as multisig from "@squads-protocol/multisig";
-const createKey = Keypair.generate();
-const [multisigPda] = multisig.getMultisigPda({{
-  createKey: createKey.publicKey,
-}});
-await multisig.rpc.multisigCreateV2({{
-  connection, creator: agent,
-  multisigPda, configAuthority: null,
-  threshold: 1,
-  members: [{{ key: agentPubkey, permissions: Permissions.all() }}],
-  timeLock: 0, memo: "{agent_name}",
-}});
-// Spending limit: ${spending_limit} USDC per tx
-await multisig.rpc.spendingLimitCreate({{
-  multisigPda, mint: USDC_MINT,
-  amount: BigInt({spending_limit_atoms}),
-  decimals: 6,
-  destinations: [jupiterProgram],
-}});"#
-    );
-
-    Json(SquadsWalletResponse {
-        status: "created".into(),
-        smart_account: smart_account.clone(),
-        config_authority,
-        spending_limit_usdc: spending_limit,
-        spending_limit_atoms,
-        program_id,
-        explorer_url: format!(
-            "https://solscan.io/account/{smart_account}?cluster=devnet"
-        ),
-        squads_app_url: format!(
-            "https://v4.squads.so/multisigs/{smart_account}"
-        ),
-        api_note: "Squads multisig created on devnet via scripts/create-squads-account.ts. Creator keypair saved in scripts/generated-creator.json.".into(),
-        sdk_snippet,
-    })
-}

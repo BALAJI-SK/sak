@@ -1,240 +1,118 @@
 # SAK — Solana Agent Kernel
 
-> Give AI agents same-slot reflexes, a pre-sign kill switch, and 1000× cheaper state storage — in one Rust kernel that plugs under any existing agent framework.
+> The execution kernel for Solana AI agents — pre-sign safety, oracle-grade reflexes, and 1000× cheaper on-chain state in one Rust crate.
 
 [![Integrate in 60 seconds →](https://img.shields.io/badge/Integrate%20in%2060%20seconds%20%E2%86%92-7c3aed)](INTEGRATE.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/Rust-1.85%2B-f4662c)](https://rustup.rs/)
 
-**SAK** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the **execution and safety layer** — not the AI, not the blockchain, not the agent framework.
-
----
-
-## What SAK Does
-
-| Pillar | Component | What It Does |
-|--------|-----------|--------------|
-| **Pillar 2** | **Guardian** (✅ Complete) | Simulates every transaction in LiteSVM before signing. Blocks malicious tx with **zero on-chain cost**. |
-| **Pillar 1** | **Reflex Engine** (✅ Complete) | Subscribes to Yellowstone Geyser push streams. Reacts to on-chain events within the same slot. |
-| **Pillar 3** | **ZK State** (🔧 Stub) | In-memory state backed by `HashMap`. Light Protocol ZK-compression integration is the next milestone — API surface is stable, persistence not yet wired. |
-| **SDK** | **sak-sdk** (✅ Complete) | Public API for agent developers. Simple `submit()` interface. |
-
----
+SAK is a **Rust execution kernel** that plugs under any Solana AI agent framework. Every transaction is simulated in LiteSVM before the agent ever signs — eliminating capital waste from failed and malicious transactions at zero on-chain cost.
 
 ## Quick Start
-
-### Prerequisites
-
-- [Rust](https://rustup.rs/) (stable toolchain)
-- [Node.js](https://nodejs.org/) ≥ 18 (for demo UI)
-- [Solana CLI](https://docs.solana.com/cli/install-solana-cli) (optional, for deployment)
-
-### Build Everything
 
 ```bash
 git clone https://github.com/BALAJI-SK/sak.git
 cd sak
 cargo build --workspace
+cargo test -p sak-guardian  # 20/20 evil corpus tests
 ```
 
-### Run Tests
+## What SAK Does
 
-```bash
-# Run all tests (20 evil corpus tests in Guardian)
-cargo test --workspace
+| Pillar | Component | Status | What It Does |
+|--------|-----------|--------|--------------|
+| **Layer 1** | **Guardian** | ✅ Complete | Simulates every tx in LiteSVM before signing. 7 rules (slippage, whitelist, drain, compute, fee, accounts, min transfer). Zero on-chain cost, < 50ms. |
+| **Layer 2** | **Squads Policy** | ✅ Complete | On-chain spending-limit enforced via Squads v4 smart accounts. Even if Guardian is bypassed, the chain rejects over-limit txs. Demo multisig on devnet. |
+| **Oracle** | **Reflex Engine** | ✅ Complete | Yellowstone Geyser push oracle — emits `ChainEvent` into an async channel within the same slot. No polling, no RPC overhead. |
+| **State** | **ZK Compressed State** | 🔧 Stub | In-memory HashMap. Light Protocol ZK-compression is the next milestone — 100–1000× cheaper than standard accounts. API surface stable. |
+| **SDK** | **sak-sdk** | ✅ Complete | `Kernel` struct wraps all pillars. One `submit()` call integrates SAK under any agent framework. |
 
-# Run only Guardian tests
-cargo test -p sak-guardian
-```
-
-Expected output:
-```
-running 20 tests
-test blocks_99_percent_slippage          ... ok
-test blocks_wrong_token_mint             ... ok
-... (18 more)
-test result: ok. 20 passed; 0 failed
-```
-
----
-
-## Live Demo — Guardian Safety Log
-
-The demo shows the Guardian blocking malicious LLM-generated transactions in real time with a beautiful design system.
-
-### Start the Demo
-
-**Terminal 1 — Start WebSocket server** (spawns transaction generator automatically):
-```bash
-cargo run -p race-server
-```
-
-Expected output:
-```
-INFO WebSocket server running on ws://0.0.0.0:3001
-INFO Transaction generator started - sending to stdout
-```
-
-**Terminal 2 — Start React UI:**
-```bash
-cd demo/race-ui
-npm install  # only needed once
-npm run dev
-```
-
-Expected output:
-```
-VITE v6.4.2 ready in 553 ms
-➜  Local:   http://localhost:3000/
-```
-
-**Terminal 3 — Open browser:**
-```
-Navigate to http://localhost:3000
-```
-
-### What You'll See
-
-The UI features a **three-panel layout** with the Claude design system:
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│  SAK Guardian                              │
-│  Every transaction simulated before signing    │
-├─────────────────────────────────────────────┤
-│  [Flow]  [Live Trace]  [Transaction Log]   │
-│                                             │
-│  Agent → Guardian → Solana                  │
-│  BLOCKED: 106  ALLOWED: 14                 │
-│                                             │
-│  [BLOCKED] 99% Slippage Swap               │
-│  Rule: max_slippage — 9900bps > 200bps    │
-│  Prevented loss: $498.50                   │
-│                                             │
-│  [ALLOWED] Valid USDC Transfer              │
-│  All 7 rules passed ✓                      │
-└─────────────────────────────────────────────┘
+AI Agent (LLM intent)
+        │
+        ▼
+┌───────────────────────┐
+│  Guardian (Layer 1)   │  LiteSVM simulation + 7 rules
+│  sak-guardian         │  < 50ms · off-chain · zero cost
+└──────────┬────────────┘
+           │ ALLOW
+           ▼
+┌───────────────────────┐
+│  Squads Policy (L2)   │  Spending limit · on-chain enforced
+│  v4 Smart Account     │  Defense in depth
+└──────────┬────────────┘
+           │ WITHIN LIMIT
+           ▼
+    Solana Blockchain
+
+Background push oracle (same-slot):
+┌───────────────────────┐
+│  Reflex Engine        │  Yellowstone Geyser → ChainEvent channel
+│  sak-reflex           │  SlotUpdate · AccountChanged · ProgramInvoked
+└───────────────────────┘
 ```
 
-- **RED** = BLOCKED (with rule name, reason, and prevented loss)
-- **GREEN** = ALLOWED (with simulation confirmation)
-- **Severity pills**: CRITICAL / HIGH / MEDIUM / LOW
-- **Simulation time**: Displayed in ms (typically 28-60ms)
-- **Feedback system**: Rate decisions 1-5 stars or Wrong/Correct
+## API
 
----
+Full reference docs in [`docs/api/`](docs/api/):
 
-## Project Structure
+| Doc | What it covers |
+|-----|----------------|
+| [`sak-sdk.md`](docs/api/sak-sdk.md) | `Kernel::new`, `submit()`, `with_guardian`, `with_reflex`, `with_state` + `Decision`, `TxMeta`, `ChainEvent` types |
+| [`sak-guardian.md`](docs/api/sak-guardian.md) | `Guardian::from_yaml`, `evaluate`, `evaluate_raw`, all 9 `Rule` variants, `rules.yaml` schema, instruction data parsing |
+| [`race-server.md`](docs/api/race-server.md) | HTTP/WS demo endpoints — `/evaluate`, `/sol-price`, `/feedback`, `/ws` with request/response JSON |
 
-```
-SAK/
-├── Cargo.toml                     # workspace root
-├── README.md                     # this file
-├── SAK.md                       # full project context
-├── SAK_BUILD_PHASES.md          # detailed build guide
-├── rules.yaml                    # Guardian rule definitions
-│
-├── crates/
-│   ├── sak-core/                # shared types + errors (✅)
-│   ├── sak-guardian/            # Pillar 2: rule engine (✅)
-│   │   ├── src/
-│   │   │   ├── lib.rs          # Guardian API + parse_simulation_error()
-│   │   │   ├── rules.rs        # rule definitions (YAML)
-│   │   │   ├── evaluator.rs    # rule evaluation logic
-│   │   │   └── simulator.rs    # LiteSVM simulation
-│   │   └── tests/
-│   │       └── evil_corpus.rs  # 20 malicious tx patterns
-│   ├── sak-reflex/             # Pillar 1: Geyser subscriber (✅)
-│   ├── sak-state/               # Pillar 3: ZK state (🔧 stub — in-memory)
-│   ├── sak-sdk/                # public agent-facing API (✅)
-│   └── sak-bin/                # CLI daemon (✅)
-│
-└── demo/
-    ├── README.md                  # Design system documentation
-    ├── colors_and_type.css       # Design tokens (colors, type, radii)
-    ├── assets/                   # Brand marks (sak-shield.svg, sak-wordmark.svg)
-    ├── fonts/                    # Surgena font family (light/regular/medium/semibold/bold)
-    ├── ui_kits/dashboard/        # Reference implementation (JSX + HTML)
-    ├── preview/                  # HTML preview cards
-    ├── tx-generator/            # generates evil + valid transactions (70/30 mix)
-    ├── race-server/             # WebSocket server (broadcasts to UI)
-    └── race-ui/                # React UI (live safety log)
-        ├── src/
-        │   ├── App.tsx         # Three-panel layout with Surgena font
-        │   ├── index.css       # Design tokens + Tailwind
-        │   └── main.tsx        # Entry point
-        ├── tailwind.config.js   # Tailwind configuration
-        ├── postcss.config.js    # PostCSS configuration
-        └── tsconfig.json       # TypeScript configuration
-```
-
----
-
-## Guardian API
-
-### Basic Usage
+### Guardian (minimal)
 
 ```rust
 use sak_guardian::Guardian;
 use sak_core::{Decision, TxMeta};
 
-// Load rules from YAML
 let mut guardian = Guardian::from_yaml("rules.yaml")?;
 
-// Evaluate a transaction (with LiteSVM simulation)
-let decision: Decision = guardian.evaluate(&transaction, &meta);
-
-match decision {
-    Decision::Allow => {
-        // Proceed to sign and broadcast
-    }
+match guardian.evaluate(&tx, &TxMeta { slippage_bps: Some(9900), .. })? {
+    Decision::Allow => sign_and_broadcast(tx),
     Decision::Reject { rule, reason } => {
-        // Zero on-chain cost — tx never left the machine
-        println!("Blocked by {}: {}", rule, reason);
+        warn!("Blocked by {rule}: {reason}");
     }
 }
 ```
 
-### Rules Configuration (`rules.yaml`)
+### SDK (full stack)
 
-```yaml
-rules:
-  - name: max_slippage
-    type: slippage_check
-    max_bps: 200              # 2% max slippage
+```rust
+use sak_sdk::{Kernel, KernelConfig};
 
-  - name: allowed_programs
-    type: program_whitelist
-    programs:
-      - JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4  # Jupiter v6
-      - whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc    # Orca Whirlpool
-      - 11111111111111111111111111111111                # System program
-      - TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA    # SPL Token
-      - ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ     # Associated Token Account
-      - ComputeBudget111111111111111111111111111111       # Compute Budget
+let mut kernel = Kernel::new(KernelConfig::default())?
+    .with_guardian("rules.yaml")?;
 
-  - name: max_account_drain
-    type: drain_check
-    max_lamports: 1000000000  # 1 SOL max transfer
-
-  - name: max_accounts
-    type: account_count_check
-    max_count: 20
-
-  - name: max_compute_units
-    type: compute_units_check
-    max_units: 1400000
-
-  - name: max_priority_fee
-    type: priority_fee_check
-    max_microlamports: 1000000
-
-  - name: min_transfer_value
-    type: min_transfer_lamports
-    min_lamports: 1
+match kernel.submit(&tx, &TxMeta::default()) {
+    Decision::Allow => println!("Safe — proceeding"),
+    Decision::Reject { rule, reason } => println!("Blocked: {rule} — {reason}"),
+}
 ```
 
----
+## Demo
 
-## Evil Corpus — 20 Malicious Patterns Blocked
+Live safety dashboard — Guardian blocks malicious LLM-generated intents in real time. Squads Policy panel shows devnet spending-limit status. Live slot counter shows Yellowstone oracle feed.
+
+```bash
+# Terminal 1: race-server (port 3001)
+cargo run -p race-server
+
+# Terminal 2: demo UI (port 4000)
+cd demo/race-ui && npx vite
+```
+
+Dashboard panels: flow diagram (Agent → Guardian → Squads → Solana), live execution trace with rule name + reason per tx, transaction log with prevented loss in USD, and live devnet slot counter.
+
+**No API key needed.** Demo Mode runs on scripted attack scenarios but evaluates against the real Rust Guardian and calls the real `/squads/create-agent-wallet` endpoint.
+
+## Evil Corpus
+
+20 tests. All pass. Every pattern is blocked by at least one rule:
 
 | # | Attack Pattern | Rule Fired | Severity |
 |---|----------------|-----------|----------|
@@ -242,177 +120,47 @@ rules:
 | 2 | Wrong token mint (fake USDC) | `allowed_programs` | high |
 | 3 | Drain entire SOL balance | `max_account_drain` | critical |
 | 4 | Unknown program ID | `allowed_programs` | high |
-| 5 | Transfer to attacker wallet | `max_account_drain` | critical |
-| 6 | Slippage set to u64::MAX | `max_slippage` | critical |
-| 7 | Jupiter route through unlisted pool | `allowed_programs` | high |
-| 8 | Zero-amount dust attack | `min_transfer_value` | low |
-| 9 | Account substitution | `max_account_drain` | critical |
-| 10 | Balance underflow | `max_account_drain` | critical |
-| 11 | Excessive compute units | `max_compute_units` | medium |
-| 12 | Reentrancy-style CPI loop | `allowed_programs` | high |
-| 13 | Fake system program ID | `allowed_programs` | high |
-| 14 | Multiple drain instructions | `max_account_drain` | critical |
-| 15 | Slippage bypass via CPI | `max_slippage` | critical |
-| 16 | Token account closed mid-tx | `allowed_programs` | high |
-| 17 | Priority fee 100× normal | `max_priority_fee` | medium |
-| 18 | Memo field injection | `allowed_programs` | high |
-| 19 | Transaction with 30+ accounts | `max_accounts` | medium |
-| 20 | Unverified program (mainnet fail) | `allowed_programs` | high |
+| 5–20 | Flash loans, compute bombs, CPI loops, priority fee abuse, dust attacks, account substitution, … | _various_ | low–critical |
 
----
+## Rules (`rules.yaml`)
 
-## Feedback System
-
-The demo includes a **live feedback system** that allows users to rate Guardian decisions:
-
-- **Star ratings**: 1-5 stars on each blocked transaction
-- **Quick buttons**: "Wrong" (1 star) / "Correct" (5 stars)
-- **Backend storage**: Feedback stored in memory via `FeedbackStore`
-- **Summary endpoint**: `GET /feedback/summary` returns:
-  ```json
-  {
-    "total": 18,
-    "correct": 14,
-    "wrong": 4,
-    "accuracy": 77.8
-  }
-  ```
-
----
-
-## Design System
-
-The UI uses a **custom design system** inspired by monitoring consoles (Bloomberg Terminal energy):
-
-### Typography
-- **Surgena** (light/regular/medium/semibold/bold + italics) — Display + UI
-- **JetBrains Mono** (400/500/700) — Code, numbers, addresses
-
-### Color Palette
-
-| Token | Hex | Use |
-|---|---|---|
-| `bg` | `#0a0a0f` | Page background (near black, blue-shifted) |
-| `surface` | `#12121a` | Cards, panels |
-| `border` | `#1e1e2e` | All borders, dividers |
-| `green` | `#00ff88` | ALLOWED, system-active, brand |
-| `red` | `#ff3366` | BLOCKED, critical |
-| `orange` | `#ff9900` | High severity, warning |
-| `purple` | `#7c3aed` | AI agent node, links, accent |
-
-### Animation
-- **Transitions**: 180–300ms, `cubic-bezier(0.2, 0.8, 0.2, 1)`
-- **Slide-in**: New log cards slide from right (280ms)
-- **Glow**: Red/green border glow on appear (1000ms)
-- **Pulse**: System Active dot pulses every 2s
-
-### Icons
-- **Lucide** — outline style, 1.5px stroke, 24×24 default
-- Loaded via CDN: `https://unpkg.com/lucide@latest/dist/umd/lucide.js`
-
----
-
-## Current Status
-
-| Phase | Component | Status |
-|-------|------------|--------|
-| 0 | Workspace scaffold | ✅ Complete |
-| 1 | sak-core (shared types) | ✅ Complete |
-| 2 | sak-guardian (Pillar 2) | ✅ Complete |
-| 3 | Demo UI (WebSocket + React) | ✅ Complete |
-| 4 | sak-reflex (Pillar 1) | ✅ Complete |
-| 5 | sak-state (Pillar 3) | 🔧 Stub |
-| 6 | sak-sdk (public API) | ✅ Complete |
-| 7 | Feedback System | ✅ Complete |
-| 8 | UI Design System | ✅ Complete |
-| 9 | Demo Recording | ⬜ Pending |
-| 10 | Deployment + Submission | ⬜ Pending |
-
-**Hackathon:** Colosseum Frontier  
-**Deadline:** May 11, 2026 (5 days remaining)
-
----
-
-## Technology Stack
-
-### Core
-- **Rust** — systems language for performance
-- **LiteSVM** — local Solana VM for transaction simulation
-- **Tokio** — async runtime
-
-### Guardian (Pillar 2)
-- **serde / serde_yaml** — rule configuration
-- **tracing** — structured logging
-- **litesvm** — Solana VM simulation
-
-### Reflex Engine (Pillar 1)
-- **yellowstone-grpc** — Geyser subscriber
-- **tokio-stream** — stream processing
-
-### ZK State (Pillar 3)
-- **light-protocol** — ZK compression
-- **solana-program** — on-chain program
-
-### Demo UI
-- **React + TypeScript** — frontend
-- **Vite** — build tool (v6.4.2)
-- **Tailwind CSS** — utility-first styling (v3)
-- **Surgena Font** — custom brand typography
-- **Lucide Icons** — outline icon set
-- **Axum + tokio-tungstenite** — WebSocket server
-
----
-
-## For Hackathon Judges
-
-### What to Expect
-
-1. **Live URL:** https://your-demo-url.com (deploy before submission)
-2. **Demo Video:** 90 seconds, embedded on landing page
-3. **GitHub Repo:** Clean README with working demo link
-
-### Demo Script (90 Seconds)
-
-```
-0:00-0:10  Show the problem (LLM hallucinations drain wallets)
-0:10-0:30  Show Guardian evaluating transactions in real time
-0:30-0:60  Show 3-4 blocked transactions with rule names + prevented loss
-0:60-0:80  Show allowed transaction going through
-0:80-0:90  Call to action: "Ship agents that can't be used against you"
+```yaml
+rules:
+  - name: max_slippage        type: slippage_check         max_bps: 200
+  - name: allowed_programs    type: program_whitelist      programs: [Jupiter v6, Orca, System, SPL Token, ATA, ComputeBudget]
+  - name: max_account_drain   type: drain_check            max_lamports: 1000000000
+  - name: max_compute_units   type: compute_units_check    max_units: 1400000
+  - name: max_priority_fee    type: priority_fee_check     max_microlamports: 1000000
+  - name: min_transfer_value  type: min_transfer_lamports  min_lamports: 1
+  - name: max_accounts        type: account_count_check    max_count: 20
 ```
 
-### Key Metrics
-- **20/20** evil corpus tests passing
-- **28-60ms** average simulation time
-- **70/30** blocked/allowed transaction mix
-- **7** active rules in Guardian
-- **1000×** cheaper than on-chain simulation
+Rules run in order — first rejection short-circuits.
 
----
+## Project Structure
+
+```
+crates/
+  sak-core/        shared types (Decision, TxMeta, ChainEvent, GuardianFeedback)
+  sak-guardian/    LiteSVM simulation + rule evaluation
+  sak-reflex/      Yellowstone Geyser gRPC subscriber
+  sak-state/       ZK-compressed agent state (stub)
+  sak-sdk/         public Kernel API (submit, with_guardian, …)
+  sak-bin/         CLI daemon
+demo/
+  race-server/     Axum HTTP + WS server (evaluate, sol-price, feedback, /ws)
+  race-ui/         Standalone HTML dashboard (Vite dev server, port 4000)
+  tx-generator/    Generates 70/30 evil/valid transaction stream
+docs/
+  api/             API reference (sak-sdk, sak-guardian, race-server)
+```
 
 ## Team
 
-- **Balaji Segu Krishnaiah** — Founder, MSc AI (DCU), ex-McKinsey, ex-Tejas Networks
-- **Prateek C** — CTO, MSc AI, ex-Tejas Networks
-- **Sai Shreyas Gubbi Harish** — Co-founder, MSc Cloud (NCI), ex-EY
-- **Tejas Shiv Kumar** — CMO, MSc DA (DCU), ex-AceMicromatic
+Balaji Segu Krishnaiah, Prateek C, Sai Shreyas Gubbi Harish, Tejas Shiv Kumar.
 
----
+Built for the Colosseum Frontier hackathon — Infrastructure track.
 
 ## License
 
-[Add your license here]
-
----
-
-## Links
-
-- **Colosseum Frontier:** https://arena.colosseum.org/
-- **Documentation:** See `SAK.md` for full project context
-- **Status:** See `STATUS.md` for build progress
-- **Build Phases:** See `SAK_BUILD_PHASES.md` for detailed build guide
-- **Design System:** See `demo/README.md` for UI design documentation
-
----
-
-**Built with ❤️ for the Solana ecosystem**
+MIT.

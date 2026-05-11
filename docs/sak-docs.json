@@ -163,22 +163,34 @@
   "api": {
     "crates": ["sak-guardian", "sak-core", "sak-sdk", "sak-reflex", "sak-state"],
 
+    "crate_purpose": {
+      "sak-guardian": "Pre-sign transaction simulation + rule evaluation. The safety layer.",
+      "sak-core": "Shared types (Decision, TxMeta, ChainEvent, Rule enum). Used by all other crates.",
+      "sak-sdk": "High-level Kernel builder. Wraps all three pillars into one interface for agent developers.",
+      "sak-reflex": "Yellowstone Geyser push subscriber. Same-slot event delivery (no polling).",
+      "sak-state": "ZK-compressed state storage via Light Protocol. 100-1000x cheaper rent."
+    },
+
     "guardian": {
       "struct": "Guardian",
+      "purpose": "Guardian sits between the LLM and the signing step. It receives every transaction the agent wants to send, simulates it locally in LiteSVM, and runs 7 configurable rules against the result. No transaction reaches the network without Guardian approval.",
       "constructors": [
         {
           "signature": "pub fn from_yaml(path: impl AsRef<Path>) -> Result<Self>",
-          "description": "Load Guardian with rules parsed from a YAML file.",
+          "description": "Load Guardian with rules parsed from a YAML file. This is the standard way to create a Guardian. The YAML file contains all 7 rules with their parameters (see rules.yaml for the default config).",
+          "when_to_use": "Production. Your rules are maintained as a YAML file in your repo.",
           "example": "let mut guardian = Guardian::from_yaml(\"rules.yaml\")?;"
         },
         {
           "signature": "pub fn from_yaml_with_svm(path: impl AsRef<Path>, svm: LiteSVM) -> Result<Self>",
-          "description": "Load rules from YAML and inject an existing LiteSVM instance.",
+          "description": "Load rules from YAML but use an externally-provided LiteSVM instance. Use this when you need pre-seeded accounts in the simulator (e.g., token accounts with balance).",
+          "when_to_use": "Tests that require specific on-chain state for simulation.",
           "example": "let mut guardian = Guardian::from_yaml_with_svm(\"rules.yaml\", my_svm)?;"
         },
         {
           "signature": "pub fn with_rules(rules: Vec<Rule>) -> Self",
-          "description": "Construct directly from a Vec<Rule>. Useful in tests.",
+          "description": "Construct Guardian directly from a Vec<Rule>, skipping YAML entirely. Useful for tests where you want to configure rules inline.",
+          "when_to_use": "Unit tests and programmatic rule configuration.",
           "example": "let guardian = Guardian::with_rules(vec![Rule::SlippageCheck { name: \"max_slippage\".into(), max_bps: 200 }]);"
         }
       ],
@@ -186,24 +198,28 @@
         {
           "name": "evaluate",
           "signature": "pub fn evaluate(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision",
-          "description": "Simulate a VersionedTransaction inside LiteSVM, capture pre/post balances, then run all rules. Slower path — use for high-value transactions. Requires &mut self because LiteSVM maintains internal state.",
+          "description": "**Full simulation path.** Runs the VersionedTransaction inside LiteSVM (full Solana VM), captures pre-state and post-state balances for every account, then evaluates all 7 rules against the simulation result. Slower (25-70ms) but catches execution-level failures that raw evaluation misses.",
+          "when_to_use": "High-value transactions where you want maximum safety. Requires &mut self because LiteSVM maintains internal VM state between calls.",
           "parameters": [
-            { "name": "tx",   "type": "&VersionedTransaction", "description": "Unsigned versioned transaction. Must be a legacy message." },
-            { "name": "meta", "type": "&TxMeta",               "description": "Agent-supplied metadata (slippage_bps, description)." }
+            { "name": "tx",   "type": "&VersionedTransaction", "description": "Unsigned versioned transaction from your LLM/agent. Must use a legacy message format (not v0). The transaction is NOT submitted to the network — only simulated locally." },
+            { "name": "meta", "type": "&TxMeta",               "description": "Agent-supplied metadata including slippage_bps and a human-readable description. This feeds into rules like SlippageCheck." }
           ],
-          "returns": "Decision::Allow or Decision::Reject { rule, reason }",
-          "note": "If LiteSVM simulation itself fails, returns Decision::Reject with rule = \"pre_sign_simulation\" and a human-readable reason string."
+          "returns": "Returns Decision::Allow if all rules pass, or Decision::Reject { rule, reason } with the name of the rule that fired and why.",
+          "errors": "If LiteSVM simulation itself fails (e.g., insufficient funds, invalid account data), Guardian does NOT crash — it returns Decision::Reject with rule = \"pre_sign_simulation\". The reason string will be a human-readable mapping of the Solana runtime error (see simulation_errors section for the full mapping table). Never panics.",
+          "example": "let mut guardian = Guardian::from_yaml(\"rules.yaml\")?;\nlet decision = guardian.evaluate(&versioned_tx, &TxMeta {\n    slippage_bps: Some(50),\n    description: Some(\"swap 0.1 SOL to USDC\"),\n});\nmatch decision {\n    Decision::Allow => /* sign and broadcast */,\n    Decision::Reject { rule, reason } => /* log and abort */,\n}"
         },
         {
           "name": "evaluate_raw",
           "signature": "pub fn evaluate_raw(&self, account_keys: Vec<String>, instructions: &[(u8, &[u8])], meta: &TxMeta) -> Decision",
-          "description": "Evaluate rules against raw account keys and instruction data without running LiteSVM. Fastest path. Takes &self (no mutation).",
+          "description": "**No-simulation path.** Evaluates rules using only account keys and instruction data — no LiteSVM needed. Takes &self (no mutation). Cannot catch execution-level failures (like insufficient funds), but is much faster and doesn't require a LiteSVM instance.",
+          "when_to_use": "Low-value transactions, high-frequency trading, or environments where LiteSVM is unavailable. Also used by the race-server HTTP API since it runs in a stateless context.",
           "parameters": [
-            { "name": "account_keys",  "type": "Vec<String>",       "description": "All account public keys referenced in the transaction (base-58)." },
-            { "name": "instructions",  "type": "&[(u8, &[u8])]",    "description": "Instruction data as (program_id_index, data) tuples — matches compiled Solana Message layout." },
-            { "name": "meta",          "type": "&TxMeta",           "description": "Agent-supplied metadata." }
+            { "name": "account_keys",  "type": "Vec<String>",       "description": "All account public keys referenced in the transaction (base-58 encoded). First element is usually the fee payer." },
+            { "name": "instructions",  "type": "&[(u8, &[u8])]",    "description": "Instruction data as (program_id_index, data) tuples. The u8 is an index into account_keys. This matches the compiled Solana Message layout exactly — just pass the accounts and instructions directly from your message." },
+            { "name": "meta",          "type": "&TxMeta",           "description": "Agent-supplied metadata (slippage_bps, description). Rules like SlippageCheck and MinTransferLamports depend on this." }
           ],
-          "returns": "Decision::Allow or Decision::Reject { rule, reason }"
+          "returns": "Decision::Allow or Decision::Reject { rule, reason }. Same as evaluate(), but without the pre_sign_simulation fallback (no simulation to fail).",
+          "example": "let decision = guardian.evaluate_raw(\n    vec![payer.to_string(), JUP6_PROGRAM.to_string()],\n    &[(1, &[])],  // call Jupiter (index 1) with no instruction data\n    &TxMeta { slippage_bps: Some(9900), description: None },\n);\nassert_eq!(decision, Decision::Reject {\n    rule: \"max_slippage\".into(),\n    reason: \"slippage 9900bps exceeds max 200bps\".into()\n});"
         }
       ]
     },
@@ -211,24 +227,27 @@
     "kernel": {
       "struct": "Kernel",
       "crate": "sak-sdk",
-      "description": "High-level SDK entrypoint. Wraps Guardian, Reflex Engine, and ZK State into one builder-pattern interface.",
+      "purpose": "Kernel is the one-stop API for agent developers. Instead of wiring Guardian, Reflex Engine, and ZK State separately, you build a Kernel with a builder pattern and call submit(). Kernel handles the orchestration internally.",
+      "description": "High-level SDK entrypoint. Wraps all three SAK pillars (Guardian + Reflex Engine + ZK State) into one builder-pattern interface. Start here if you're integrating SAK into an agent framework.",
       "config": {
         "name": "KernelConfig",
+        "purpose": "Configuration for a Kernel. All fields optional — use Default::default() to get a dev setup.",
         "fields": [
-          { "name": "geyser_endpoint", "type": "Option<String>", "description": "Yellowstone gRPC endpoint URL." },
-          { "name": "helius_api_key",  "type": "Option<String>", "description": "API key for Helius Geyser (x_token)." },
-          { "name": "rules_path",      "type": "Option<String>", "description": "Path to rules YAML. Default: Some(\"rules.yaml\")." }
+          { "name": "geyser_endpoint", "type": "Option<String>", "description": "Yellowstone gRPC endpoint URL. Get this from your Geyser provider (Helius, GetBlock, Triton). Required for Reflex Engine. Example: \"https://grpc.helius.dev\"." },
+          { "name": "helius_api_key",  "type": "Option<String>", "description": "API key for Helius Geyser (sent as x_token in gRPC metadata). Get a free tier key at helius.dev. Only needed if using Helius as your Geyser provider." },
+          { "name": "rules_path",      "type": "Option<String>", "description": "Path to the rules YAML file. Defaults to Some(\"rules.yaml\") via rules_path_or_default(). If the file doesn't exist, with_guardian() returns Err." }
         ]
       },
       "methods": [
-        { "name": "new",            "signature": "pub fn new(config: KernelConfig) -> Result<Self>",                             "description": "Create Kernel. All pillars start uninitialized." },
-        { "name": "with_guardian",  "signature": "pub fn with_guardian(self, rules_path: &str) -> Result<Self>",                "description": "Initialize Guardian from a rules YAML file." },
-        { "name": "with_reflex",    "signature": "pub fn with_reflex(self, endpoint: &str, x_token: Option<String>) -> (Self, EventRouter)", "description": "Initialize Reflex Engine. Returns (Kernel, EventRouter) — subscribe to events on the router." },
-        { "name": "with_state",     "signature": "pub fn with_state(self) -> Result<Self>",                                     "description": "Initialize ZK State manager." },
-        { "name": "submit",         "signature": "pub fn submit(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision", "description": "Submit a transaction through the Guardian. If Guardian is not initialized, logs a warning and returns Decision::Allow." },
-        { "name": "state",          "signature": "pub fn state(&mut self) -> Option<&mut ZkState>",                             "description": "Access the ZK State manager." },
-        { "name": "start_reflex",   "signature": "pub async fn start_reflex(self, filter: SubscribeFilter) -> Result<()>",      "description": "Start the Geyser subscriber (runs indefinitely with reconnect)." }
-      ]
+        { "name": "new",            "signature": "pub fn new(config: KernelConfig) -> Result<Self>",                             "description": "Create a Kernel shell. No pillars are initialized yet — call .with_guardian(), .with_reflex(), .with_state() to attach them. A call to submit() before with_guardian() returns Decision::Allow (fail-open warning logged)." },
+        { "name": "with_guardian",  "signature": "pub fn with_guardian(self, rules_path: &str) -> Result<Self>",                "description": "Initialize the Guardian pillar from a rules YAML file. This must be called before submit() if you want Guardian protection. Returns Err if the YAML file is missing or malformed." },
+        { "name": "with_reflex",    "signature": "pub fn with_reflex(self, endpoint: &str, x_token: Option<String>) -> (Self, EventRouter)", "description": "Initialize the Reflex Engine pillar. Takes the Geyser gRPC endpoint and optional API key. Returns (Kernel, EventRouter) — subscribe to ChainEvent variants on the EventRouter to react to on-chain events in the same slot." },
+        { "name": "with_state",     "signature": "pub fn with_state(self) -> Result<Self>",                                     "description": "Initialize the ZK State pillar. Enables compressed state storage via Light Protocol. Requires network access to Solana RPC." },
+        { "name": "submit",         "signature": "pub fn submit(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision", "description": "**The primary method.** Routes a transaction through the Guardian. If Guardian is initialized, calls evaluate() internally. If not, logs a warning and returns Decision::Allow (fail-open for backward compatibility — don't rely on this in production)." },
+        { "name": "state",          "signature": "pub fn state(&mut self) -> Option<&mut ZkState>",                             "description": "Access the ZK State manager for reading/writing compressed agent state. Returns None if with_state() was not called." },
+        { "name": "start_reflex",   "signature": "pub async fn start_reflex(self, filter: SubscribeFilter) -> Result<()>",      "description": "Start the Yellowstone Geyser subscriber loop. Runs indefinitely with automatic reconnection (exponential backoff with jitter, cap 30s). Consumes the Kernel (self) since it owns the event loop. Spawns on tokio." }
+      ],
+      "builder_pattern_example": "use sak_sdk::{Kernel, KernelConfig};\nuse sak_core::TxMeta;\n\n#[tokio::main]\nasync fn main() -> anyhow::Result<()> {\n    let mut kernel = Kernel::new(KernelConfig::default())?\n        .with_guardian(\"rules.yaml\")?\n        .with_state()?;\n\n    let meta = TxMeta {\n        slippage_bps: Some(150),\n        description: Some(\"swap 100 USDC for SOL\".into()),\n    };\n\n    match kernel.submit(&tx, &meta) {\n        Decision::Allow => { /* sign and broadcast */ }\n        Decision::Reject { rule, reason } => {\n            eprintln!(\"Blocked by {rule}: {reason}\");\n        }\n    }\n    Ok(())\n}"
     },
 
     "types": [
@@ -237,39 +256,41 @@
         "crate": "sak-core",
         "kind": "enum",
         "definition": "pub enum Decision {\n    Allow,\n    Reject { rule: String, reason: String },\n}",
-        "description": "The Guardian's verdict on a transaction.",
+        "description": "The Guardian's verdict on a transaction. This is the most important type in SAK — every transaction evaluation returns one of these two variants. `Allow` means sign and send. `Reject` means the transaction is dangerous — do NOT sign (zero on-chain cost).",
         "variants": [
-          { "name": "Allow",  "description": "Transaction passed all rules. Proceed to sign and broadcast." },
-          { "name": "Reject", "description": "A rule fired. Do not sign. Zero on-chain cost.", "fields": [
-            { "name": "rule",   "type": "String", "description": "Name of the rule that fired (e.g. max_slippage, max_account_drain)." },
-            { "name": "reason", "type": "String", "description": "Human-readable explanation." }
+          { "name": "Allow",  "description": "Transaction passed all rules. Proceed to sign and broadcast to the Solana network." },
+          { "name": "Reject", "description": "A rule fired. Do NOT sign this transaction. No on-chain cost was incurred — the simulation and evaluation happened entirely locally.", "fields": [
+            { "name": "rule",   "type": "String", "description": "Name of the rule that fired. Use this for logging and alerting. Examples: max_slippage, max_account_drain, allowed_programs." },
+            { "name": "reason", "type": "String", "description": "Human-readable explanation of why the rule fired. Includes the specific values that triggered the rule. Log this to help with debugging and rule tuning." }
           ]}
-        ]
+        ],
+        "example_json": "{\n  \"decision\": \"Reject\",\n  \"rule\": \"max_slippage\",\n  \"reason\": \"slippage 9900bps exceeds max 200bps\"\n}"
       },
       {
         "name": "TxMeta",
         "crate": "sak-core",
         "kind": "struct",
         "definition": "pub struct TxMeta {\n    pub slippage_bps: Option<u64>,\n    pub description: Option<String>,\n}",
-        "description": "Agent-supplied metadata passed alongside a transaction. Implements Default (both fields None). slippage_bps is required for the slippage_check rule to activate.",
+        "description": "Agent-supplied metadata passed alongside every transaction. Think of this as the 'intent' — what the agent says it's doing. Rules like SlippageCheck operate on TxMeta data rather than raw transaction bytes. Implements Default (both fields = None).",
         "fields": [
-          { "name": "slippage_bps",  "type": "Option<u64>",    "description": "Slippage tolerance declared by the agent in basis points (100 bps = 1%). None means slippage rule is skipped." },
-          { "name": "description",   "type": "Option<String>", "description": "Human-readable description of the intended action." }
-        ]
+          { "name": "slippage_bps",  "type": "Option<u64>",    "description": "Slippage tolerance the agent is willing to accept, in basis points (100 bps = 1%). If the agent declares 50 bps (0.5%) but the swap would execute at 200 bps, the SlippageCheck rule fires. Set to None to skip the slippage check entirely (not recommended)." },
+          { "name": "description",   "type": "Option<String>", "description": "Human-readable description of what the agent intends to do. Not evaluated by any rule, but included in audit logs and the race-server UI for debugging." }
+        ],
+        "example": "TxMeta { slippage_bps: Some(150), description: Some(\"swap 0.1 SOL for USDC\".into()) }"
       },
       {
         "name": "ChainEvent",
         "crate": "sak-core",
         "kind": "struct",
         "definition": "pub struct ChainEvent {\n    pub slot: u64,\n    pub kind: EventKind,\n}",
-        "description": "A slot-stamped on-chain event produced by the Reflex Engine."
+        "description": "An on-chain event produced by the Reflex Engine from the Yellowstone Geyser push stream. Each event is stamped with the Solana slot it occurred in. Agent callbacks receive these through the EventRouter. 'Same-slot' means the agent receives and reacts before the next slot (400ms window)."
       },
       {
         "name": "EventKind",
         "crate": "sak-core",
         "kind": "enum",
         "definition": "pub enum EventKind {\n    AccountChanged { pubkey: String, lamports: u64 },\n    ProgramInvoked { program_id: String },\n}",
-        "description": "The type of on-chain event."
+        "description": "The type of on-chain event. AccountChanged fires when a tracked account's lamport balance changes. ProgramInvoked fires when any tracked program is invoked. Subscribe to specific accounts/programs via SubscribeFilter."
       },
       {
         "name": "Rule",
@@ -588,6 +609,18 @@
       "title": "evaluate_raw — fastest path (no LiteSVM)",
       "code": "// Use when you have account keys + instruction bytes directly\nlet keys = vec![\n    \"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\".to_string(),\n];\nlet data: Vec<u8> = vec![0x09, 0x00]; // example ix data\nlet ixs: &[(u8, &[u8])] = &[(0, &data)];\n\nlet meta = TxMeta {\n    slippage_bps: Some(150),\n    description: None,\n};\n\nlet decision = guardian.evaluate_raw(keys, ixs, &meta);",
       "language": "rust"
+    },
+    "typescript_example": {
+      "title": "TypeScript — HTTP client (for race-server API)",
+      "code": "// Call the SAK race-server /evaluate endpoint from any TypeScript app\ninterface EvaluateRequest {\n  slippage_bps: number;\n  amount_lamports: number;\n  program_ids: string[];\n  compute_units?: number;\n  description?: string;\n}\n\ninterface EvaluateResponse {\n  decision: 'allowed' | 'rejected';\n  rule: string | null;\n  reason: string | null;\n  attack_type: string;\n  severity: 'critical' | 'high' | 'medium' | 'low' | 'none';\n  simulation_time_ms: number;\n}\n\nasync function evaluate(\n  intent: EvaluateRequest,\n  serverUrl = 'http://localhost:3001'\n): Promise<EvaluateResponse> {\n  const res = await fetch(`${serverUrl}/evaluate`, {\n    method: 'POST',\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify(intent),\n  });\n  if (!res.ok) {\n    const err = await res.json();\n    throw new Error(`Guardian error: ${err.message}`);\n  }\n  return res.json();\n}\n\n// Example: test a suspicious intent\nconst result = await evaluate({\n  slippage_bps: 9900,\n  amount_lamports: 5_000_000_000, // 5 SOL\n  program_ids: ['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'],\n  description: 'maximize swap output',\n});\n\nconsole.log(result.decision === 'rejected'\n  ? `Blocked by ${result.rule}: ${result.reason}`\n  : 'Transaction allowed');",
+      "language": "typescript",
+      "note": "REST wrapper around race-server's /evaluate endpoint. Useful for demo UI, scripting, or prototyping. Not a production SDK."
+    },
+    "python_example": {
+      "title": "Python — HTTP client (for race-server API)",
+      "code": "import httpx\nimport asyncio\n\nasync def evaluate_intent(\n    slippage_bps: int,\n    amount_lamports: int,\n    program_ids: list[str],\n    compute_units: int = 0,\n    description: str = \"\",\n    server_url: str = \"http://localhost:3001\",\n):\n    async with httpx.AsyncClient() as client:\n        res = await client.post(\n            f\"{server_url}/evaluate\",\n            json={\n                \"slippage_bps\": slippage_bps,\n                \"amount_lamports\": amount_lamports,\n                \"program_ids\": program_ids,\n                \"compute_units\": compute_units,\n                \"description\": description,\n            },\n        )\n        if res.status_code != 200:\n            err = res.json()\n            raise RuntimeError(f\"Guardian error: {err['message']}\")\n        return res.json()\n\n# Check if a suspicious intent is blocked\nresult = asyncio.run(evaluate_intent(\n    slippage_bps=9900,\n    amount_lamports=5_000_000_000,\n    program_ids=[\"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\"],\n    description=\"maximize swap output\",\n))\n\nif result[\"decision\"] == \"rejected\":\n    print(f\"Blocked by {result['rule']}: {result['reason']}\")\nelse:\n    print(\"Transaction allowed\")\n\n# Subscribe to real-time events via WebSocket\nasync def listen_ws(server_url: str = \"ws://localhost:3001/ws\"):\n    async with httpx.AsyncClient() as client:\n        async with client.ws_connect(server_url) as ws:\n            async for message in ws.iter_text():\n                print(\"Event:\", message)\n\nasyncio.run(listen_ws())",
+      "language": "python",
+      "note": "Async HTTP + WebSocket client for the race-server. Requires httpx (`pip install httpx`)."
     },
     "elizaos_example": {
       "title": "elizaOS plugin (planned)",

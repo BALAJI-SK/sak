@@ -5,16 +5,102 @@ info:
   description: |
     Real-time transaction simulation dashboard for SAK (Solana Agent Kernel).
 
-    The race-server streams live transaction logs over WebSocket and
-    collects user feedback on Guardian decisions via REST.
+    The race-server streams live transaction logs over WebSocket, evaluates
+    transaction intents against the Guardian rule engine via REST, proxies
+    NVIDIA NIM for AI chat, retrieves SOL price from CoinGecko, and collects
+    user feedback on Guardian decisions.
+
+    ## When to use each API surface
+
+    | API | When to use |
+    |-----|-------------|
+    | REST `/evaluate` | Test transaction intents against Guardian rules from a browser or script |
+    | WebSocket `/ws` | Stream live Guardian decisions in real time (for dashboards, monitoring) |
+    | REST `/feedback` | Submit user feedback to measure Guardian accuracy over time |
+    | REST `/sol-price` | Display current SOL/USD price in demo UI |
+    | REST `/squads/*` | Demo Squads multisig integration for spending limits |
+    | Proxy `/api/nvidia/*` | Call NVIDIA NIM models through the server (avoids CORS issues) |
+
+    ## Authentication
+
+    **REST endpoints (most):** No authentication required. The demo server runs
+    locally or on Railway with permissive CORS.
+
+    **`GET /api/waitlist/list`:** Requires `Authorization: Bearer <ADMIN_SECRET>`
+    header. The ADMIN_SECRET is set via environment variable.
+
+    **NVIDIA proxy (`/api/nvidia/*`):** Forwards the `Authorization` header
+    from your client request directly to NVIDIA NIM. Pass your NVIDIA API key.
+
+    ## Rate Limits
+
+    No rate limits in the current demo deployment. The server runs locally or
+    on Railway with a single instance. If you need production rate limiting,
+    deploy behind Cloudflare or a similar edge proxy.
+
+    ## Error Responses
+
+    All endpoints return errors in a consistent JSON format:
+
+    ```json
+    {
+      "error": "error_code_string",
+      "message": "Human-readable explanation of what went wrong.",
+      "status": 400
+    }
+    ```
+
+    Common error codes:
+
+    | HTTP Status | `error` field | Meaning |
+    |-------------|---------------|---------|
+    | 400 | `invalid_request` | Malformed JSON body or missing required fields |
+    | 400 | `validation_error` | A field failed validation (e.g., invalid email format) |
+    | 401 | `unauthorized` | Missing or invalid `Authorization` header |
+    | 404 | `not_found` | Endpoint does not exist |
+    | 502 | `upstream_error` | Upstream service (NVIDIA, CoinGecko) returned an error |
+    | 503 | `simulation_failed` | Guardian simulation crashed (not a rule rejection — an actual error) |
+
   contact:
-    url: https://github.com/anomalyco/sak
+    url: https://github.com/BALAJI-SK/sak
 
 servers:
   - url: http://localhost:3001
-    description: Local development (race-server)
+    description: Local development (race-server, default port)
+  - url: https://sak-demo.railway.app
+    description: Railway deployment (example — replace with actual URL)
+
+tags:
+  - name: WebSocket
+    description: Real-time transaction event stream
+  - name: Evaluate
+    description: Transaction intent evaluation against Guardian rules
+  - name: Feedback
+    description: User feedback collection and accuracy tracking
+  - name: Market Data
+    description: SOL price and market information
+  - name: Squads
+    description: Squads multisig integration (demo)
+  - name: NVIDIA
+    description: NVIDIA NIM model proxy
+  - name: Health
+    description: Server liveness checks
 
 paths:
+  /health:
+    get:
+      summary: Liveness check
+      description: Returns HTTP 200 with body "ok" when the server is running.
+      tags: [Health]
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "ok"
+
   /ws:
     get:
       summary: WebSocket transaction stream
@@ -22,6 +108,33 @@ paths:
         Upgrades to WebSocket and streams JSON transaction log entries
         in real time. Each message represents one transaction evaluated
         by the Guardian (allowed or rejected).
+
+        ## Message format
+
+        All messages are newline-delimited JSON. Two message types:
+
+        **Transaction events** (from `demo/tx-generator` subprocess):
+        ```json
+        {"id":"tx-...","timestamp":"...","decision":"rejected","rule":"max_slippage", ...}
+        ```
+
+        **Slot updates** (from Reflex Engine / Yellowstone Geyser, when YELLOWSTONE_TOKEN is set):
+        ```json
+        {"type":"slot_update","slot":312345678}
+        ```
+
+        ## Connection lifecycle
+
+        1. Client opens WebSocket to `ws://localhost:3001/ws`
+        2. Server upgrades connection and starts sending messages
+        3. Messages are sent as JSON, one per line
+        4. No authentication required
+        5. Server capacity: 1024 concurrent clients (broadcast channel cap)
+
+        The server spawns `demo/tx-generator` as a subprocess and reads its
+        stdout line-by-line. Each line is broadcast to all connected clients.
+        On tx-generator exit, the server restarts it after a 5-second delay.
+        Works only when not on Railway (or `ENABLE_TX_GENERATOR=true`).
       tags: [WebSocket]
       responses:
         "101":
@@ -30,24 +143,139 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TransactionLogEntry"
+
+  /evaluate:
+    post:
+      summary: Evaluate a transaction intent
+      description: |
+        Core Guardian evaluation endpoint. Maps a high-level transaction
+        intent (slippage, programs, amount) to simulated instructions and
+        runs them through `sak-guardian::evaluate_raw`.
+
+        All 7 Guardian rules are evaluated in order. The first rejection
+        short-circuits and returns the result immediately. If all rules pass,
+        the transaction is allowed.
+
+        **Layer 2 Squads override:** If Guardian allows but
+        `amount_lamports > 100_000_000` (0.1 SOL notional in this demo), the
+        response flips to `"rejected"` with rule `"squads_spending_limit"` to
+        demonstrate Squads-style caps on top of Guardian allow.
+      tags: [Evaluate]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EvaluateRequest"
+            examples:
+              high_slippage:
+                summary: "99% Slippage Swap"
+                value:
+                  slippage_bps: 9900
+                  amount_lamports: 100000000
+                  program_ids: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]
+                  compute_units: 0
+                  description: "maximize USDC to SOL swap output"
+              drain_attempt:
+                summary: "Full wallet drain"
+                value:
+                  slippage_bps: 100
+                  amount_lamports: 5000000000
+                  program_ids: ["11111111111111111111111111111111"]
+                  compute_units: 200000
+                  description: "send all SOL to new wallet"
+              clean_swap:
+                summary: "Clean swap (should be allowed)"
+                value:
+                  slippage_bps: 150
+                  amount_lamports: 100000000
+                  program_ids: ["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]
+                  compute_units: 300000
+                  description: "swap 0.1 SOL for USDC"
+      responses:
+        "200":
+          description: Evaluation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EvaluateResponse"
+              examples:
+                rejected:
+                  summary: "Rejected — max slippage"
+                  value:
+                    decision: "rejected"
+                    rule: "max_slippage"
+                    reason: "slippage 9900bps exceeds max 200bps"
+                    attack_type: "99% Slippage Swap"
+                    severity: "critical"
+                    simulation_time_ms: 19
+                allowed:
+                  summary: "Allowed — clean swap"
+                  value:
+                    decision: "allowed"
+                    rule: null
+                    reason: null
+                    attack_type: "Clean Swap"
+                    severity: "none"
+                    simulation_time_ms: 12
+                squads_override:
+                  summary: "Allowed by Guardian, blocked by Squads"
+                  value:
+                    decision: "rejected"
+                    rule: "squads_spending_limit"
+                    reason: "Smart-account limit: notional exceeds demo policy (>0.1 SOL)"
+                    attack_type: "Layer 2 — Squads blocked (Guardian allowed)"
+                    severity: "high"
+                    simulation_time_ms: 14
+        "503":
+          description: Guardian simulation crashed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-                timestamp: "2026-05-07T16:21:55.123456Z"
-                decision: "rejected"
-                rule: "max_slippage"
-                reason: "9900bps exceeds maximum 200bps"
-                attack_type: "99% Slippage Swap"
-                description: "Agent tried to swap 0.01 SOL with 99% slippage tolerance"
-                severity: "critical"
-                simulated_loss_usd: 49.86
-                simulation_time_ms: 43
+                error: "simulation_failed"
+                message: "Guardian evaluation panicked: insufficient funds for rent"
+                status: 503
+
+  /sol-price:
+    get:
+      summary: SOL/USD price
+      description: |
+        Returns the current SOL/USD price from CoinGecko. Cached in-memory
+        for 60 seconds. Falls back to last known price (default 150.0) on
+        upstream fetch error.
+      tags: [Market Data]
+      responses:
+        "200":
+          description: Current SOL price
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [usd]
+                properties:
+                  usd:
+                    type: number
+                    format: double
+                    description: SOL price in USD
+                    example: 162.40
+              example:
+                usd: 162.40
 
   /feedback:
     post:
-      summary: Submit feedback
+      summary: Submit feedback on a Guardian decision
       description: |
-        Record user feedback on a Guardian decision. Used to track
-        accuracy of the rule engine over time.
+        Record user feedback on a Guardian evaluation. Used to track
+        rule engine accuracy over time. Feedback is stored in-memory
+        (`Arc<Mutex<Vec<GuardianFeedback>>>`) and is NOT persisted
+        across server restarts.
+
+        Star rating to verdict mapping:
+        - 1–2 stars → `Wrong`
+        - 3 stars → `Neutral`
+        - 4–5 stars → `Correct`
       tags: [Feedback]
       requestBody:
         required: true
@@ -55,13 +283,25 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GuardianFeedback"
-            example:
-              timestamp: "2026-05-07T16:21:55Z"
-              decision: "rejected"
-              rule: "max_slippage"
-              description: "99% Slippage Swap"
-              stars: 1
-              verdict: "Wrong"
+            examples:
+              correct:
+                summary: "Correct rejection"
+                value:
+                  timestamp: "2026-05-07T16:21:55Z"
+                  decision: "rejected"
+                  rule: "max_slippage"
+                  description: "99% Slippage Swap"
+                  stars: 5
+                  verdict: "Correct"
+              wrong:
+                summary: "Wrong rejection (false positive)"
+                value:
+                  timestamp: "2026-05-07T16:22:00Z"
+                  decision: "rejected"
+                  rule: "max_account_drain"
+                  description: "legitimate large swap"
+                  stars: 1
+                  verdict: "Wrong"
       responses:
         "200":
           description: Feedback recorded
@@ -69,14 +309,25 @@ paths:
             text/plain:
               schema:
                 type: string
-                example: "recorded"
+              example: "recorded"
+        "400":
+          description: Invalid feedback body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "validation_error"
+                message: "stars must be between 1 and 5"
+                status: 400
 
   /feedback/summary:
     get:
-      summary: Feedback summary
+      summary: Feedback summary statistics
       description: |
-        Returns aggregate feedback statistics: total entries,
-        correct/wrong counts, and accuracy percentage.
+        Returns aggregate feedback statistics: total entries, correct/wrong
+        counts, and accuracy percentage. Available immediately after the
+        first feedback submission.
       tags: [Feedback]
       responses:
         "200":
@@ -85,16 +336,351 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeedbackSummary"
+              examples:
+                high_accuracy:
+                  summary: "High accuracy"
+                  value:
+                    total: 42
+                    correct: 38
+                    wrong: 4
+                    accuracy: 90.5
+                low_accuracy:
+                  summary: "Low accuracy — rule may need tuning"
+                  value:
+                    total: 10
+                    correct: 5
+                    wrong: 5
+                    accuracy: 50.0
+
+  /squads/create-agent-wallet:
+    post:
+      summary: Create a demo Squads multisig wallet
+      description: |
+        Returns hardcoded devnet Squads multisig information.
+        Does NOT create an on-chain account. The response returns
+        addresses configured via `SQUADS_SMART_ACCOUNT` and
+        `SQUADS_CONFIG_AUTHORITY` environment variables (or defaults).
+      tags: [Squads]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_name, spending_limit_usdc]
+              properties:
+                agent_name:
+                  type: string
+                  description: Display name for the agent wallet
+                  example: "SAK Demo Agent"
+                spending_limit_usdc:
+                  type: number
+                  description: Maximum spending limit in USDC
+                  example: 10
+      responses:
+        "200":
+          description: Squads multisig info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "created"
+                  smart_account:
+                    type: string
+                    description: Squads multisig address (devnet)
+                    example: "HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX"
+                  config_authority:
+                    type: string
+                    description: Config authority keypair address
+                    example: "2bzdLiLZdKRgb1zMdndTbDEgtbPwLepfjNPPCQrawaoZ"
+                  spending_limit_usdc:
+                    type: number
+                    example: 10.0
+                  spending_limit_atoms:
+                    type: integer
+                    description: Spending limit in smallest units
+                    example: 10000000
+                  program_id:
+                    type: string
+                    description: Squads program ID
+                    example: "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf"
+                  explorer_url:
+                    type: string
+                    description: Solscan URL for the smart account
+                    example: "https://solscan.io/account/HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX?cluster=devnet"
+                  squads_app_url:
+                    type: string
+                    description: Squads dashboard URL
+                    example: "https://v4.squads.so/multisig/HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX"
+                  api_note:
+                    type: string
+                    description: Important caveat about on-chain creation
+                  sdk_snippet:
+                    type: string
+                    description: Example TypeScript code for Squads SDK integration
+
+  /api/nvidia/models:
+    get:
+      summary: List NVIDIA NIM models
+      description: |
+        Proxies the request to NVIDIA NIM API's models endpoint.
+        Forward the `Authorization` header from your client.
+        The server copies `Authorization`, `Accept`, and `Content-Type`
+        headers upstream.
+      tags: [NVIDIA]
+      responses:
+        "200":
+          description: List of available models
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          description: NVIDIA upstream error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                total: 18
-                correct: 14
-                wrong: 4
-                accuracy: 77.8
+                error: "upstream_error"
+                message: "NVIDIA NIM API returned 502"
+                status: 502
+
+  /api/nvidia/chat/completions:
+    post:
+      summary: Chat completion via NVIDIA NIM
+      description: |
+        Proxies the request to NVIDIA NIM API's chat completions endpoint.
+        Forward the `Authorization` header from your client (NVIDIA API key).
+        The server copies `Authorization`, `Accept`, and `Content-Type`
+        headers upstream.
+      tags: [NVIDIA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                model:
+                  type: string
+                  example: "meta/llama-3.1-8b-instruct"
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      role:
+                        type: string
+                        enum: [system, user, assistant]
+                      content:
+                        type: string
+      responses:
+        "200":
+          description: Chat completion response
+          content:
+            application/json:
+              schema:
+                type: object
+        "502":
+          description: NVIDIA upstream error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      description: Standard error payload returned by all endpoints.
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code (snake_case)
+          example: "validation_error"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "stars must be between 1 and 5"
+        status:
+          type: integer
+          description: HTTP status code
+          example: 400
+
+    EvaluateRequest:
+      type: object
+      description: |
+        Transaction intent to evaluate against Guardian rules.
+        Maps to `sak-guardian::evaluate_raw` internally.
+      required:
+        - slippage_bps
+        - amount_lamports
+        - program_ids
+      properties:
+        slippage_bps:
+          type: integer
+          description: |
+            Agent-declared slippage tolerance in basis points (100 bps = 1%).
+            Evaluated by the `slippage_check` rule against `max_bps: 200`.
+            Values ≥ 9000 → "99% Slippage Swap" (critical).
+            Values ≥ 5000 → "High-Slippage Swap" (critical).
+            Values < 5000 but > 200 → "High-Slippage Swap" (high).
+          minimum: 0
+          example: 9900
+        amount_lamports:
+          type: integer
+          description: |
+            Transfer amount in lamports (1 SOL = 1,000,000,000 lamports).
+            Evaluated by the `drain_check` rule against `max_lamports: 1000000000`.
+            Values > 5 SOL → "Drain Balance" (critical).
+            Values ≤ 5 SOL → "Drain Balance" (high).
+            Also triggers Squads spending limit override at > 10,000,000 lamports.
+          minimum: 0
+          example: 100000000
+        program_ids:
+          type: array
+          description: |
+            Program IDs the transaction will invoke. Each is checked against
+            the `program_whitelist`. One unlisted program rejects the whole
+            transaction.
+          items:
+            type: string
+            example: "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"
+        compute_units:
+          type: integer
+          description: |
+            Compute unit budget requested (via SetComputeUnitLimit).
+            Evaluated by `compute_units_check` against `max_units: 1400000`.
+          minimum: 0
+          example: 0
+        description:
+          type: string
+          description: |
+            Human-readable intent description. Used in the audit trail
+            and for attack type classification display.
+          example: "maximize USDC to SOL swap output"
+
+    EvaluateResponse:
+      type: object
+      description: Guardian evaluation result.
+      properties:
+        decision:
+          type: string
+          enum: [allowed, rejected]
+          description: "`allowed` = all rules passed. `rejected` = a rule fired."
+          example: "rejected"
+        rule:
+          type: string
+          nullable: true
+          description: |
+            Name of the rule that rejected the transaction.
+            `null` when `decision` is `allowed`.
+          example: "max_slippage"
+        reason:
+          type: string
+          nullable: true
+          description: |
+            Human-readable rejection reason from the rule.
+            `null` when `decision` is `allowed`.
+          example: "slippage 9900bps exceeds max 200bps"
+        attack_type:
+          type: string
+          description: |
+            Human-readable attack classification based on the
+            rule and trigger value. One of: "99% Slippage Swap",
+            "High-Slippage Swap", "Drain Balance",
+            "Unwhitelisted Program", "Compute Bomb",
+            "Priority Fee Bomb", "Squads Spending Limit",
+            "Clean Swap".
+          example: "99% Slippage Swap"
+        severity:
+          type: string
+          enum: [critical, high, medium, low, none]
+          description: Severity level of the triggered rule.
+          example: "critical"
+        simulation_time_ms:
+          type: integer
+          description: Wall-clock time for Guardian evaluation in milliseconds.
+          example: 19
+
+    GuardianFeedback:
+      type: object
+      description: |
+        User feedback on a Guardian decision. Submit via POST /feedback.
+        Verdict is derived from stars (1-2→Wrong, 3→Neutral, 4-5→Correct)
+        but can also be set explicitly.
+      required:
+        - timestamp
+        - decision
+        - stars
+        - verdict
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          description: RFC 3339 timestamp of the original transaction.
+          example: "2026-05-07T16:21:55Z"
+        decision:
+          type: string
+          enum: [allowed, rejected]
+          description: Original Guardian decision.
+        rule:
+          type: string
+          nullable: true
+          description: Rule that triggered (null if allowed).
+          example: "max_slippage"
+        description:
+          type: string
+          nullable: true
+          description: Human-readable transaction description.
+          example: "99% Slippage Swap"
+        stars:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: |
+            Star rating from the user. Maps to verdict:
+            1–2 → Wrong, 3 → Neutral, 4–5 → Correct.
+        verdict:
+          type: string
+          enum: [Correct, Wrong, Neutral]
+          description: |
+            Derived verdict from star rating, or explicitly set.
+            Case-insensitive. Accepts serde enum format `{"Correct": null}`.
+
+    FeedbackSummary:
+      type: object
+      description: Aggregate feedback statistics.
+      properties:
+        total:
+          type: integer
+          description: Total number of feedback entries.
+          example: 42
+        correct:
+          type: integer
+          description: Count of "Correct" verdicts.
+          example: 38
+        wrong:
+          type: integer
+          description: Count of "Wrong" verdicts.
+          example: 4
+        accuracy:
+          type: number
+          format: double
+          description: |
+            Correctness percentage = (correct / total) × 100.
+            Returns 0 when total is 0.
+          example: 90.5
+
     TransactionLogEntry:
       type: object
+      description: |
+        A single transaction event broadcast over WebSocket. Produced by
+        the `demo/tx-generator` subprocess one line at a time.
       required:
         - id
         - timestamp
@@ -107,104 +693,46 @@ components:
         id:
           type: string
           format: uuid
-          description: Unique transaction identifier
+          description: Unique transaction identifier.
           example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
         timestamp:
           type: string
           format: date-time
-          description: RFC 3339 timestamp
+          description: RFC 3339 timestamp of the evaluation.
           example: "2026-05-07T16:21:55.123456Z"
         decision:
           type: string
           enum: [allowed, rejected]
-          description: Guardian decision
+          description: Guardian decision.
         rule:
           type: string
           nullable: true
-          description: Triggered rule name (null if allowed)
+          description: Triggered rule name (null if allowed).
           example: "max_slippage"
         reason:
           type: string
           nullable: true
-          description: Human-readable rejection reason
+          description: Human-readable rejection reason.
           example: "9900bps exceeds maximum 200bps"
         attack_type:
           type: string
-          description: Attack or transaction type label
+          description: Attack or transaction type classification.
           example: "99% Slippage Swap"
         description:
           type: string
-          description: Human-readable description
+          description: Human-readable transaction description from the agent.
           example: "Agent tried to swap 0.01 SOL with 99% slippage tolerance"
         severity:
           type: string
           enum: [critical, high, medium, low, none]
-          description: Severity level
+          description: Severity level of the evaluation.
         simulated_loss_usd:
           type: number
           format: double
           nullable: true
-          description: Estimated prevented loss in USD
+          description: Estimated prevented loss in USD (null if allowed).
           example: 49.86
         simulation_time_ms:
           type: integer
-          description: Simulation duration in milliseconds
+          description: Simulation duration in milliseconds.
           example: 43
-
-    GuardianFeedback:
-      type: object
-      required:
-        - timestamp
-        - decision
-        - stars
-        - verdict
-      properties:
-        timestamp:
-          type: string
-          format: date-time
-          description: Timestamp of the original transaction
-          example: "2026-05-07T16:21:55Z"
-        decision:
-          type: string
-          enum: [allowed, rejected]
-          description: Original Guardian decision
-        rule:
-          type: string
-          nullable: true
-          description: Rule that triggered (null if allowed)
-          example: "max_slippage"
-        description:
-          type: string
-          nullable: true
-          description: Transaction description
-          example: "99% Slippage Swap"
-        stars:
-          type: integer
-          minimum: 1
-          maximum: 5
-          description: "Star rating: 1-2=Wrong, 3=Neutral, 4-5=Correct"
-        verdict:
-          type: string
-          enum: [Correct, Wrong, Neutral]
-          description: Derived verdict from star rating
-
-    FeedbackSummary:
-      type: object
-      properties:
-        total:
-          type: integer
-          description: Total feedback entries
-          example: 18
-        correct:
-          type: integer
-          description: Count of Correct verdicts
-          example: 14
-        wrong:
-          type: integer
-          description: Count of Wrong verdicts
-          example: 4
-        accuracy:
-          type: number
-          format: double
-          description: "Correctness percentage = (correct / total) * 100"
-          example: 77.8

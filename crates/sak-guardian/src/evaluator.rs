@@ -30,10 +30,10 @@ impl<'a> TxView<'a> {
         }
     }
 
-    pub fn from_tx_and_sim(tx: &VersionedTransaction, sim: &SimulationResult) -> Self {
+    pub fn from_tx_and_sim(tx: &VersionedTransaction, sim: &SimulationResult) -> Result<Self, String> {
         let msg = match &tx.message {
             VersionedMessage::Legacy(msg) => msg,
-            _ => panic!("legacy message required"),
+            _ => return Err("VersionedMessage::V0 not supported — use Legacy".into()),
         };
 
         let account_keys: Vec<String> = msg.account_keys
@@ -46,12 +46,12 @@ impl<'a> TxView<'a> {
             .map(|ix| (ix.program_id_index, ix.data.clone()))
             .collect();
 
-        TxView::Simulated {
+        Ok(TxView::Simulated {
             account_keys,
             instructions,
             pre_balances: sim.pre_balances.clone(),
             post_balances: sim.post_balances.clone(),
-        }
+        })
     }
 
     pub fn account_keys(&self) -> &[String] {
