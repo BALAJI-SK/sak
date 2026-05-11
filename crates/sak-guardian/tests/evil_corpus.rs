@@ -412,3 +412,87 @@ fn blocks_unverified_program_mainnet_fail() {
     );
     assert_reject(&result, "allowed_programs");
 }
+
+// ── BlockedProgram + indexed dispatch ─────────────────────────────────────────
+
+const SCAM_PROGRAM: &str = "Sc4mProGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG";
+
+/// `blocked_program` rule fires when the tx invokes the blocklisted program.
+#[test]
+fn blocks_program_via_blocklist() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let scam = Address::from_str("FjkRsKBfvP14oXdM1aQjWXzqRA6mqLouAbnZjfaDh1Vs").unwrap();
+    let tx = unknown_program_tx(&svm, &payer, scam);
+    let guardian = Guardian::with_rules(vec![Rule::BlockedProgram {
+        name: "scam_program".into(),
+        program: scam.to_string(),
+    }]);
+    let result = eval(&guardian, &tx, &Default::default());
+    assert_reject(&result, "scam_program");
+}
+
+/// Sanity: a 2k-entry blocklist still rejects the one tx that hits an
+/// entry, and the indexed dispatch keeps it correct (not just fast).
+#[test]
+fn large_blocklist_still_rejects_match() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let scam = Address::from_str("FjkRsKBfvP14oXdM1aQjWXzqRA6mqLouAbnZjfaDh1Vs").unwrap();
+    let tx = unknown_program_tx(&svm, &payer, scam);
+
+    let mut rules: Vec<Rule> = (0..2000)
+        .map(|i| Rule::BlockedProgram {
+            name: format!("noise_{i}"),
+            // Deterministic non-matching base58-shaped strings.
+            program: format!("{:0>44}", i),
+        })
+        .collect();
+    rules.push(Rule::BlockedProgram {
+        name: "real_scam".into(),
+        program: scam.to_string(),
+    });
+
+    let guardian = Guardian::with_rules(rules);
+    let result = eval(&guardian, &tx, &Default::default());
+    assert_reject(&result, "real_scam");
+}
+
+/// A clean tx against a 2k-entry blocklist must still be allowed.
+#[test]
+fn large_blocklist_allows_clean_tx() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let recipient = Address::new_unique();
+    let ix = transfer(&payer.pubkey(), &recipient, 1_000);
+    let msg = Message::new(&[ix], Some(&payer.pubkey()));
+    let tx = Transaction::new(&[&payer], msg, svm.latest_blockhash());
+
+    let rules: Vec<Rule> = (0..2000)
+        .map(|i| Rule::BlockedProgram {
+            name: format!("noise_{i}"),
+            program: format!("{:0>44}", i),
+        })
+        .collect();
+
+    let guardian = Guardian::with_rules(rules);
+    let result = eval(&guardian, &tx, &Default::default());
+    match result {
+        Decision::Allow => {}
+        Decision::Reject { rule, reason } => panic!("expected Allow, got Reject({rule}: {reason})"),
+    }
+}
+
+/// `Guardian::stats()` should report exact counts, not a marketing number.
+#[test]
+fn stats_reports_truthful_counts() {
+    let guardian = Guardian::with_rules(vec![
+        Rule::SlippageCheck { name: "s".into(), max_bps: 100 },
+        Rule::BlockedProgram { name: "b1".into(), program: SCAM_PROGRAM.into() },
+        Rule::BlockedProgram { name: "b2".into(), program: "X".repeat(44) },
+    ]);
+    let s = guardian.stats();
+    assert_eq!(s.total, 3);
+    assert_eq!(s.by_kind.get("blocked_program").copied().unwrap_or(0), 2);
+    assert_eq!(s.by_kind.get("slippage_check").copied().unwrap_or(0), 1);
+}

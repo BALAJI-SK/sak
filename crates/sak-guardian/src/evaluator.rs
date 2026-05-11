@@ -63,12 +63,31 @@ impl<'a> TxView<'a> {
 }
 
 pub fn evaluate(rules: &RuleSet, tx: &TxView<'_>, meta: &TxMeta) -> Decision {
-    for rule in &rules.rules {
+    // 1. Indexed dispatch for blocklist-style rules:
+    //    only consult `blocked_program` rules whose key actually appears in
+    //    the tx. With a 2k-entry blocklist, this is O(account_keys) instead
+    //    of O(2000).
+    let keys = tx.account_keys();
+    for key in keys {
+        if let Some(rule_idxs) = rules.indices.blocked_program_by_id.get(key) {
+            for &i in rule_idxs {
+                if let Some((reason, rule_name)) = check_rule(&rules.rules[i], tx, meta) {
+                    tracing::warn!(rule = %rule_name, reason = %reason, "Guardian blocked transaction");
+                    return Decision::Reject { rule: rule_name, reason };
+                }
+            }
+        }
+    }
+
+    // 2. Global rules — scanned in author order, short-circuit on first reject.
+    for &i in &rules.indices.global {
+        let rule = &rules.rules[i];
         if let Some((reason, rule_name)) = check_rule(rule, tx, meta) {
             tracing::warn!(rule = %rule_name, reason = %reason, "Guardian blocked transaction");
             return Decision::Reject { rule: rule_name, reason };
         }
     }
+
     tracing::info!("Guardian approved transaction");
     Decision::Allow
 }
@@ -80,6 +99,19 @@ fn check_rule(rule: &Rule, tx: &TxView<'_>, meta: &TxMeta) -> Option<(String, St
             if bps > *max_bps {
                 return Some((
                     format!("slippage {}bps exceeds max {}bps", bps, max_bps),
+                    name.clone(),
+                ));
+            }
+            None
+        }
+
+        Rule::BlockedProgram { name, program } => {
+            // The indexed dispatch in `evaluate()` already established that
+            // `program` is in `account_keys`, but verify defensively so this
+            // rule is correct even when invoked outside the index path.
+            if tx.account_keys().iter().any(|k| k == program) {
+                return Some((
+                    format!("program {} is in the blocklist", program),
                     name.clone(),
                 ));
             }

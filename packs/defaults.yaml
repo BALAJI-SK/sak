@@ -1,0 +1,33 @@
+# Default Guardian rules
+# These are the seven hand-written rules that originally lived inline in
+# `demo/race-server/src/main.rs::default_guardian()`. They cover the
+# baseline attack surface that the demo's evil-corpus tests target:
+#   - high slippage, balance drains, compute / priority-fee bombs,
+#     overly-large transactions, and dust transfers.
+# Per-program and per-mint coverage is layered on top via the other
+# packs in this directory.
+
+rules:
+  - name: max_slippage
+    type: slippage_check
+    max_bps: 200
+
+  - name: max_account_drain
+    type: drain_check
+    max_lamports: 1000000000  # 1 SOL
+
+  - name: max_compute_units
+    type: compute_units_check
+    max_units: 1400000
+
+  - name: max_priority_fee
+    type: priority_fee_check
+    max_microlamports: 1000000
+
+  - name: max_accounts
+    type: account_count_check
+    max_count: 64
+
+  - name: min_transfer_lamports
+    type: min_transfer_lamports
+    min_lamports: 1

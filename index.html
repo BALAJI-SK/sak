@@ -248,8 +248,9 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
           <span style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">Guardian Security Rules</span>
-          <span style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--sak-green)">20/20</span>
+          <span id="ruleCountBadge" title="Loaded from /rules/stats" style="display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.04em;background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--sak-green)">— rules</span>
         </div>
+        <div id="rulePackBreakdown" style="display:none;font-family:var(--font-mono);font-size:10px;color:var(--fg-2);margin-bottom:10px;line-height:1.5"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;font-family:var(--font-mono)">
           <div style="color:var(--fg)">max_slippage</div>
           <div style="color:var(--fg-2);text-align:right">200 bps</div>
@@ -282,7 +283,7 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
           <rect x="10" y="48" width="240" height="56" rx="8" fill="#12121a" stroke="#ff9900" stroke-width="1.5"/>
           <circle cx="26" cy="62" r="4" fill="#ff9900"/>
           <text x="36" y="66" fill="#ff9900" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">SAK GUARDIAN</text>
-          <text x="16" y="80" fill="#8888aa" font-size="8.5" font-family="monospace">LiteSVM pre-sign simulation · 20 safety rules</text>
+          <text id="ruleCountSvgText" x="16" y="80" fill="#8888aa" font-size="8.5" font-family="monospace">LiteSVM pre-sign simulation · — rules</text>
           <text x="16" y="93" fill="#8888aa" font-size="8.5" font-family="monospace">Off-chain · &lt;50ms · zero on-chain cost</text>
           <!-- Arrow marker -->
           <defs>
@@ -621,6 +622,58 @@ let agentRunning = false;
 let feedbackCorrect = 0;
 let feedbackWrong = 0;
 let falsePositives = 0;
+let rulesActive = 0;
+let rulesByKind = {};
+let rulesPacks = [];
+
+// ============================================================
+// RULE STATS — pulls the truthful count from race-server's /rules/stats
+// rather than hardcoding a number in markup. Falls back silently when
+// the backend is offline so the UI never shows a stale "20/20".
+// ============================================================
+async function loadRuleStats() {
+  try {
+    const res = await fetch(API_BASE + '/rules/stats', { method: 'GET' });
+    if (!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    rulesActive = data.total || 0;
+    rulesByKind = data.by_kind || {};
+    rulesPacks = Array.isArray(data.packs) ? data.packs : [];
+  } catch (_) {
+    rulesActive = 0;
+    rulesByKind = {};
+    rulesPacks = [];
+  }
+  renderRuleStats();
+  if (typeof renderStats === 'function') renderStats();
+}
+
+function renderRuleStats() {
+  const badge = document.getElementById('ruleCountBadge');
+  const svgText = document.getElementById('ruleCountSvgText');
+  const breakdown = document.getElementById('rulePackBreakdown');
+  if (rulesActive > 0) {
+    if (badge) badge.textContent = rulesActive.toLocaleString() + ' rules';
+    if (svgText) svgText.textContent = 'LiteSVM pre-sign simulation · ' + rulesActive.toLocaleString() + ' rules';
+    if (breakdown) {
+      const blocked = rulesByKind.blocked_program || 0;
+      const whitelist = rulesByKind.program_whitelist || 0;
+      const detectors = Object.keys(rulesByKind).length;
+      const parts = [
+        detectors + ' detector types',
+        blocked.toLocaleString() + ' blocked-program entries',
+        whitelist + ' allowlist rule' + (whitelist === 1 ? '' : 's'),
+        rulesPacks.length + ' pack' + (rulesPacks.length === 1 ? '' : 's') + ': ' + rulesPacks.join(', '),
+      ];
+      breakdown.textContent = parts.join(' · ');
+      breakdown.style.display = 'block';
+    }
+  } else {
+    if (badge) badge.textContent = '— rules';
+    if (svgText) svgText.textContent = 'LiteSVM pre-sign simulation · backend offline';
+    if (breakdown) breakdown.style.display = 'none';
+  }
+}
 
 function renderFooter() {
   const total = feedbackCorrect + feedbackWrong;
@@ -877,7 +930,7 @@ function renderStats() {
   root.innerHTML =
     '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:16px;display:grid;grid-template-columns:1fr 1fr;overflow:hidden">' +
       statCell('Simulation', simDisplay, 'var(--fg)') +
-      statCell('Rules', '7 active', 'var(--fg)', false, true) +
+      statCell('Rules', (rulesActive > 0 ? rulesActive.toLocaleString() : '—') + ' active', 'var(--fg)', false, true) +
       statCell('Accuracy', accuracy, 'var(--sak-green)') +
       statCell('Threats', blockedCount + ' today', 'var(--sak-red)', false, false) +
     '</div>';
@@ -936,7 +989,7 @@ function addLogCard(entry) {
       ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg)">Rule: <span style="color:var(--sak-yellow)">' + escapeHtml(entry.rule || '—') + '</span></div>' +
         (entry.reason ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">' + escapeHtml(entry.reason) + '</div>' : '') +
         lossHtml
-      : '<div style="font-family:var(--font-mono);font-size:12px;color:var(--sak-green)">All 20 rules passed ✓</div>' +
+      : '<div style="font-family:var(--font-mono);font-size:12px;color:var(--sak-green)">All checks passed ✓</div>' +
         '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">Simulation matched expected output</div>' +
         (entry.sig ? '<a href="https://explorer.solana.com/tx/' + encodeURIComponent(entry.sig) + '?cluster=devnet" target="_blank" rel="noopener" style="display:inline-block;margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--sak-blue);text-decoration:none">→ View on explorer ↗</a>' : '')
     ) +
@@ -1343,7 +1396,7 @@ async function _agentLoopBody() {
     st.innerHTML = '🤖 Blocked: <span style="color:var(--sak-yellow)">' + escapeHtml(entry.rule || '—') + '</span>';
     st.style.color = 'var(--sak-red)';
   } else {
-    st.textContent = 'All 20 rules passed ✓';
+    st.textContent = 'All checks passed ✓';
     st.style.color = 'var(--sak-green)';
   }
 }
@@ -1384,6 +1437,8 @@ function initDashboard() {
 
 
   if (typeof window.__sakStartSlotWs === 'function') window.__sakStartSlotWs();
+
+  loadRuleStats();
 
   reLucide();
 }

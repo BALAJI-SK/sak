@@ -18,6 +18,7 @@ use sak_core::{ChainEvent, Decision, FeedbackVerdict, GuardianFeedback, TxMeta};
 use sak_guardian::{Guardian, Rule};
 use sak_reflex::ReflexConfig;
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 const NVIDIA_OPENAI_V1: &str = "https://integrate.api.nvidia.com/v1";
 
@@ -49,6 +50,9 @@ type SharedPriceCache = Arc<Mutex<PriceCache>>;
 struct AppState {
     feedback: FeedbackStore,
     price: SharedPriceCache,
+    /// Loaded once at startup. `Guardian::evaluate_raw` is `&self`, so an
+    /// `Arc` is sufficient — no per-request mutex required.
+    guardian: Arc<Guardian>,
 }
 
 fn sak_demo_pages_origin(origin: &str) -> bool {
@@ -103,6 +107,98 @@ fn build_cors_layer() -> CorsLayer {
         .allow_headers(Any)
 }
 
+/// Resolve the directory containing rule pack YAML files.
+///
+/// Search order:
+///   1. `RULE_PACKS_DIR` environment variable (absolute or relative to cwd).
+///   2. `./packs` relative to the current working directory.
+///
+/// Deliberately does *not* fall back to the build-host workspace
+/// (`CARGO_MANIFEST_DIR`) — that path doesn't exist in production
+/// containers and would silently load nothing. When no filesystem
+/// packs are found, callers fall back to `EMBEDDED_PACKS` instead.
+fn rule_packs_dir() -> Option<PathBuf> {
+    if let Ok(p) = std::env::var("RULE_PACKS_DIR") {
+        let path = PathBuf::from(p);
+        if path.is_dir() {
+            return Some(path);
+        }
+    }
+    let cwd = PathBuf::from("packs");
+    if cwd.is_dir() {
+        return Some(cwd);
+    }
+    None
+}
+
+/// Rule packs compiled into the binary so the deployed service is
+/// self-contained — Railway / Fly / GitHub Actions runners can serve
+/// the right rule count without copying YAML files around.
+///
+/// Filesystem packs (under `./packs/` or `RULE_PACKS_DIR`) take precedence
+/// when they exist so local edits to YAML are picked up by a simple restart.
+const EMBEDDED_PACKS: &[(&str, &str)] = &[
+    ("defaults.yaml",          include_str!("../../../packs/defaults.yaml")),
+    ("solana-core.yaml",       include_str!("../../../packs/solana-core.yaml")),
+    ("exploits-blocklist.yaml", include_str!("../../../packs/exploits-blocklist.yaml")),
+    ("tokens-blocklist.yaml",  include_str!("../../../packs/tokens-blocklist.yaml")),
+];
+
+/// Build the runtime Guardian.
+///
+/// Load order:
+///   1. `*.yaml` from the packs directory (if it exists and is non-empty).
+///   2. Embedded packs compiled into the binary via `include_str!`.
+///   3. Hand-written `default_guardian()` as a last-resort safety net.
+fn load_runtime_guardian() -> Guardian {
+    if let Some(dir) = rule_packs_dir() {
+        let mut paths: Vec<PathBuf> = std::fs::read_dir(&dir)
+            .ok()
+            .into_iter()
+            .flatten()
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("yaml"))
+            .collect();
+        paths.sort();
+        if !paths.is_empty() {
+            match Guardian::from_yaml_files(&paths) {
+                Ok(g) => {
+                    let s = g.stats();
+                    info!(
+                        total = s.total,
+                        packs = s.packs.len(),
+                        source = "filesystem",
+                        "Guardian loaded from rule packs"
+                    );
+                    return g;
+                }
+                Err(e) => {
+                    tracing::error!(?e, "failed to parse filesystem packs; falling back to embedded");
+                }
+            }
+        } else {
+            tracing::warn!(?dir, "packs dir empty; falling back to embedded");
+        }
+    }
+
+    match Guardian::from_yaml_strings(EMBEDDED_PACKS) {
+        Ok(g) => {
+            let s = g.stats();
+            info!(
+                total = s.total,
+                packs = s.packs.len(),
+                source = "embedded",
+                "Guardian loaded from embedded rule packs"
+            );
+            g
+        }
+        Err(e) => {
+            tracing::error!(?e, "failed to load embedded packs; using hand-written defaults");
+            default_guardian()
+        }
+    }
+}
+
 fn tx_generator_enabled() -> bool {
     match std::env::var("ENABLE_TX_GENERATOR").ok().as_deref() {
         Some("1" | "true") => true,
@@ -122,9 +218,11 @@ async fn main() {
         .init();
 
     let (tx, _) = broadcast::channel::<String>(1024);
+    let guardian = Arc::new(load_runtime_guardian());
     let state = AppState {
         feedback: Arc::new(Mutex::new(Vec::new())),
         price: Arc::new(Mutex::new(PriceCache::new())),
+        guardian,
     };
 
     if tx_generator_enabled() {
@@ -225,6 +323,7 @@ async fn main() {
         .route("/feedback", post(feedback_handler))
         .route("/feedback/summary", get(feedback_summary_handler))
         .route("/evaluate", post(evaluate_handler))
+        .route("/rules/stats", get(rules_stats_handler))
 
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(cors)
@@ -461,6 +560,10 @@ fn default_guardian() -> Guardian {
             name: "min_transfer_lamports".into(),
             min_lamports: 1,
         },
+        Rule::AccountCountCheck {
+            name: "max_accounts".into(),
+            max_count: 20,
+        },
     ])
 }
 
@@ -490,11 +593,41 @@ fn classify_rejection(rule: &str, slippage_bps: u64, amount_lamports: u64) -> (&
         "allowed_programs" => ("Unwhitelisted Program", "medium"),
         "max_compute_units" => ("Compute Bomb", "medium"),
         "max_priority_fee" => ("Priority Fee Bomb", "medium"),
+        "max_accounts" => ("Account Count Exceeded", "medium"),
         _ => ("Policy Violation", "medium"),
     }
 }
 
-async fn evaluate_handler(Json(req): Json<IntentRequest>) -> Json<EvaluateResponse> {
+async fn rules_stats_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let stats = state.guardian.stats();
+    let by_kind: serde_json::Map<String, serde_json::Value> = stats
+        .by_kind
+        .iter()
+        .map(|(k, v)| (k.to_string(), serde_json::Value::from(*v)))
+        .collect();
+    let packs: Vec<String> = stats
+        .packs
+        .iter()
+        .map(|p| {
+            // Surface just the file name to clients — full paths are noise.
+            std::path::Path::new(p)
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| p.clone())
+        })
+        .collect();
+    Json(serde_json::json!({
+        "total": stats.total,
+        "by_kind": by_kind,
+        "packs": packs,
+    }))
+}
+
+async fn evaluate_handler(
+    State(state): State<AppState>,
+    Json(req): Json<IntentRequest>,
+) -> Json<EvaluateResponse> {
     let start = Instant::now();
     let slippage_bps = req.slippage_bps.unwrap_or(0);
     let amount_lamports = req.amount_lamports.unwrap_or(0);
@@ -553,8 +686,7 @@ async fn evaluate_handler(Json(req): Json<IntentRequest>) -> Json<EvaluateRespon
         slippage_bps: Some(slippage_bps),
         description: req.description.clone(),
     };
-    let guardian = default_guardian();
-    let decision = guardian.evaluate_raw(account_keys, &raw_ixs, &meta);
+    let decision = state.guardian.evaluate_raw(account_keys, &raw_ixs, &meta);
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
     let mut resp = match &decision {
