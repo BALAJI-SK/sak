@@ -14,7 +14,7 @@ SAK is a **Rust execution kernel** that plugs under any Solana AI agent framewor
 git clone https://github.com/BALAJI-SK/sak.git
 cd sak
 cargo build --workspace
-cargo test -p sak-guardian  # 25 tests: 24 evil-corpus + 1 pack-load
+cargo test -p sak-guardian  # 29 tests: 28 evil-corpus + 1 pack-load
 ```
 
 ## What SAK Does
@@ -25,6 +25,51 @@ cargo test -p sak-guardian  # 25 tests: 24 evil-corpus + 1 pack-load
 | **Oracle** | `sak-reflex` | ✅ Complete | Yellowstone Geyser push oracle — emits `ChainEvent` into an async channel within the same slot. No polling, no RPC overhead. |
 | **State** | `sak-state` | 🔧 Stub | In-memory HashMap. Light Protocol ZK-compression is the next milestone — 100–1000× cheaper than standard accounts. API surface stable. |
 | **SDK** | `sak-sdk` | ✅ Complete | `Kernel` struct wraps all pillars. One `submit()` call integrates SAK under any agent framework. |
+
+## Why Prompt-Level Defenses Aren't Enough
+
+Every jailbreak technique documented against deployed Web3 AI agents (Freysa $50k, ElizaOS memory injection, aixbt dashboard exploit, Teeception CTF) manipulates the **LLM's intent layer** — the language the model generates. SAK operates one layer lower: it evaluates **raw transaction bytes in LiteSVM before the agent ever signs**, making it blind to whatever the LLM was convinced to say.
+
+| Real attack vector | What it does to the LLM | What SAK's Guardian sees |
+|--------------------|--------------------------|--------------------------|
+| **Concept substitution** (Freysa) | Redefines `approveTransfer` as the drain function | System-program transfer > 1 SOL → `drain_check` fires |
+| **Memory injection** (ElizaOS cross-platform) | Poisons agent memory with attacker address across Discord → blockchain | Drain amount or unknown program → blocked before sign |
+| **Social engineering** ("emergency, transfer all SOL") | Agent convinced a large transfer is urgent/safe | Amount > 1 SOL → `drain_check` fires |
+| **External data poisoning** (`SELL_ALL_ASSETS()` in news feed) | Agent convinced to execute malicious swap | Slippage > 200 bps → `slippage_check` fires |
+| **Agent smuggling** (malicious sub-agent chain) | Command routed through a less-guarded sub-agent | Final tx still must clear Guardian before sign |
+| **MCP / function injection** (`<action=drain>`) | Model calls drain toolcall after malicious context | Resulting tx evaluated against full 2,010-rule set |
+| **Many-shot context corruption** | Hundreds of fake examples train model to accept harmful responses | Guardian never sees the chat history — only bytes |
+
+The LLM can be fully jailbroken. If the resulting transaction violates any rule, Guardian rejects it. No system prompt required, no trust placed in the model's refusal behavior.
+
+> This is the architecture recommendation from Anthropic's own 2025 AI security research: *"transaction verification by an independent module"* that sits outside the LLM's context window.
+
+### Where SAK sits vs audit-layer tools
+
+Tools like CertiK AI Auditor review smart contract code before deployment — catching bugs in what the contract *can* do. SAK operates at runtime, evaluating every transaction an AI agent *tries to do* before it signs. A perfectly audited contract can still be drained by a jailbroken agent calling its legitimate functions (Freysa: no contract bug, ~$50k lost). SAK is the layer between the agent and the chain.
+
+> *CertiK audits the contract. SAK guards the agent that calls it.*
+
+### SAK is SlowMist's L4 — independently specified
+
+In their 2026 joint security report, SlowMist and Bitget defined a 5-layer AI agent security framework. **SAK implements L4 verbatim:**
+
+> *"L4 on-chain risk analysis and independent signature mechanisms provide additional security isolation, enabling agents to construct transactions without directly accessing private keys, thereby reducing the systemic risks associated with high-value asset operations."*
+> — SlowMist + Bitget, *AI Agent Security Report 2026*
+
+| SlowMist layer | Purpose | SAK |
+|---|---|---|
+| L1 | Security baseline and dev specs | — |
+| L2 | Agent permission boundaries, least privilege | — |
+| L3 | Real-time threat awareness at external inputs | — |
+| **L4** | **On-chain risk analysis + independent signature isolation** | **SAK Guardian** |
+| L5 | Continuous audit and log review | `GET /rules/stats`, feedback endpoint |
+
+The same report rates **prompt injection at 🔴 Extremely High severity** and states: *"Without signature isolation or manual confirmation mechanisms, attackers could even trigger automated transactions using malicious skills."* The Guardian is that isolation — it evaluates transaction bytes, not LLM context.
+
+### BEV / sandwich attacks — $540M in 2026
+
+Blockchain Extractable Value exploits (sandwich attacks, front-running) account for over **$540 million in losses in 2026 alone**. The attack forces a swap to execute at manipulated slippage — typically > 90%. SAK's `slippage_check` rule rejects any transaction where agent-declared slippage exceeds 200 bps, **before the transaction reaches the mempool**. The attack is stopped at the signing step, not after execution.
 
 ## Architecture
 
@@ -159,19 +204,23 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 
 ## Evil Corpus
 
-24 tests. All pass. Every pattern is blocked by at least one rule:
+28 tests. All pass. Every pattern grounded in a documented real-world attack vector:
 
-| # | Attack Pattern | Rule Fired | Severity |
-|---|----------------|-----------|----------|
-| 1 | 99% slippage swap | `max_slippage` | critical |
-| 2 | Wrong token mint (fake USDC) | `allowed_programs` | high |
-| 3 | Drain entire SOL balance | `max_account_drain` | critical |
-| 4 | Unknown program ID | `allowed_programs` | high |
-| 5–20 | Flash loans, compute bombs, CPI loops, priority-fee abuse, dust attacks, account substitution, … | _various_ | low–critical |
-| 21 | Swap touching a `blocked_program` | `<pack rule>` | medium |
-| 22 | Clean tx against 2,000-rule blocklist | _allowed_ | — |
-| 23 | Malicious tx against 2,000-rule blocklist | `real_scam` | medium |
-| 24 | `Guardian::stats()` truthfulness | — | — |
+| # | Attack Pattern | Source | Rule Fired | Severity |
+|---|----------------|--------|-----------|----------|
+| 1 | 99% slippage swap | Classic MEV | `max_slippage` | critical |
+| 2 | Wrong token mint (fake USDC) | Supply chain | `allowed_programs` | high |
+| 3 | Drain entire SOL balance | Direct drain | `max_account_drain` | critical |
+| 4 | Unknown program ID | MCP injection | `allowed_programs` | high |
+| 5–20 | Flash loans, compute bombs, CPI loops, priority-fee abuse, dust attacks, account substitution, … | _various_ | _various_ | low–critical |
+| 21 | Swap touching a `blocked_program` | Blocklist pack | `<pack rule>` | medium |
+| 22 | Clean tx against 2,000-rule blocklist | Regression | _allowed_ | — |
+| 23 | Malicious tx against 2,000-rule blocklist | Blocklist pack | `real_scam` | medium |
+| 24 | `Guardian::stats()` truthfulness | Audit | — | — |
+| **25** | **Freysa-style concept substitution** (approveTransfer → drain 9 SOL) | Positive Web3 $50k exploit | `max_account_drain` | critical |
+| **26** | **BEV sandwich victim** (9,500 bps slippage forced by MEV bot) | SlowMist/Bitget $540M stat | `max_slippage` | critical |
+| **27** | **MCP context pollution** (poisoned server injects unknown program) | SlowMist report 2026 | `allowed_programs` | high |
+| **28** | **Agent-chain laundering** (multi-hop through unlisted intermediary) | SlowMist "Agent Smuggling" | `allowed_programs` | high |
 
 ## Project Structure
 
@@ -199,7 +248,7 @@ docs/
 
 ## Team
 
-Balaji Segu Krishnaiah, Prateek C, Sai Shreyas Gubbi Harish, Tejas Shiv Kumar.
+Balaji Segu Krishnaiah, Sai Shreyas Gubbi Harish, Tejas Shiv Kumar.
 
 Built for the Colosseum Frontier hackathon — Infrastructure track.
 

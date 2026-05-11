@@ -1,4 +1,5 @@
-//! Evil LLM corpus — 20 malicious transaction patterns.
+//! Evil LLM corpus — 28 malicious transaction patterns grounded in real Web3
+//! AI agent attack vectors documented by SlowMist, Bitget, and Positive Web3.
 //! Every test must assert Decision::Reject.
 
 use litesvm::LiteSVM;
@@ -481,6 +482,77 @@ fn large_blocklist_allows_clean_tx() {
         Decision::Allow => {}
         Decision::Reject { rule, reason } => panic!("expected Allow, got Reject({rule}: {reason})"),
     }
+}
+
+// ── Real-world AI agent attack patterns (SlowMist/Bitget/Positive Web3) ──────
+
+/// 25. Freysa-style concept substitution (Positive Web3, Apr 2025).
+///     The LLM is convinced that `approveTransfer` means "accept incoming funds."
+///     Under the hood the tx drains 9 SOL to an attacker address.
+///     Guardian sees bytes, not language — drain_check fires regardless.
+#[test]
+fn blocks_freysa_concept_substitution() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let attacker = Address::new_unique();
+    // 9 SOL — "approve incoming from treasury" framing in the LLM prompt
+    let tx = transfer_tx(&svm, &payer, &attacker, 9_000_000_000);
+    let result = eval(&drain_guardian(1_000_000_000), &tx, &Default::default());
+    assert_reject(&result, "max_account_drain");
+}
+
+/// 26. BEV sandwich attack victim — $540M lost in 2026 (SlowMist/Bitget report).
+///     An MEV bot front- and back-runs the agent's swap, forcing execution at
+///     9_500 bps slippage. Agent declares the (manipulated) slippage to SAK.
+///     slippage_check blocks before the tx reaches the mempool.
+#[test]
+fn blocks_bev_sandwich_victim_slippage() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let recipient = Address::new_unique();
+    let tx = transfer_tx(&svm, &payer, &recipient, 1_000);
+    // 9 500 bps = 95% slippage forced by sandwich bot
+    let meta = TxMeta { slippage_bps: Some(9_500), ..Default::default() };
+    let result = eval(&slippage_guardian(200), &tx, &meta);
+    assert_reject(&result, "max_slippage");
+}
+
+/// 27. MCP context pollution injecting an unknown program (SlowMist, 2026).
+///     A malicious MCP server returns a tool-call response that contains a
+///     crafted program ID. The agent builds a transaction invoking it.
+///     program_whitelist catches the injected program before signing.
+#[test]
+fn blocks_mcp_context_pollution_unknown_program() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    // Attacker-controlled program returned by a poisoned MCP server
+    let injected_program = Address::new_unique();
+    let tx = unknown_program_tx(&svm, &payer, injected_program);
+    let result = eval(
+        &whitelist_guardian(&[SYSTEM_PROGRAM, TOKEN_PROGRAM, JUPITER_V6]),
+        &tx,
+        &Default::default(),
+    );
+    assert_reject(&result, "allowed_programs");
+}
+
+/// 28. Agent-chain laundering — multi-hop through unknown intermediary programs
+///     (SlowMist "Agent Smuggling" pattern, 2026).
+///     A malicious sub-agent routes the tx through an unlisted intermediary
+///     to obscure the destination. The final tx still invokes an unknown program.
+///     program_whitelist detects it regardless of how many hops preceded it.
+#[test]
+fn blocks_agent_chain_laundering_unknown_intermediary() {
+    let svm = new_svm();
+    let payer = Keypair::new();
+    let intermediary = Address::new_unique(); // unlisted program in the chain
+    let tx = unknown_program_tx(&svm, &payer, intermediary);
+    let result = eval(
+        &whitelist_guardian(&[SYSTEM_PROGRAM, TOKEN_PROGRAM, JUPITER_V6]),
+        &tx,
+        &Default::default(),
+    );
+    assert_reject(&result, "allowed_programs");
 }
 
 /// `Guardian::stats()` should report exact counts, not a marketing number.

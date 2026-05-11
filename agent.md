@@ -26,26 +26,35 @@ sak/
 ├── Cargo.toml                  # workspace root (resolver = "2")
 ├── index.html                  # static Guardian + NVIDIA gate demo (mirrored in demo/race-ui/)
 ├── agent.md                    # this file — agent / maintainer context
-├── rules.yaml                  # Guardian rule definitions (read at runtime)
-├── .env                        # gitignored — real secrets go here
-├── .env.example                # committed placeholder values
+├── rules.yaml                  # legacy single-file rules (still parsed by sak-bin; packs/ used by race-server)
+├── packs/                      # Guardian rule packs — 2,010 rules across 4 YAML files
+│   ├── defaults.yaml           # baseline safety rules (slippage, drain, compute, fee, accounts)
+│   ├── solana-core.yaml        # allowlist of 41 curated mainnet programs
+│   ├── exploits-blocklist.yaml # curated scam / drainer program ids
+│   └── tokens-blocklist.yaml   # 2,000 long-tail SPL mints (generated, committed for offline use)
+├── docs/
+│   └── rule-packs/
+│       └── verified-mints.txt  # 531 verified mints (docs-only, not enforced — no mint_allowlist rule type yet)
 ├── scripts/
 │   ├── bundle-static-demo.sh   # → .pages-out/ for Cloudflare Pages
-│   └── deploy-devnet-demo.sh   # bundle + wrangler deploy → sak-devnet-test
+│   ├── deploy-devnet-demo.sh   # bundle + wrangler deploy → sak-devnet-test
+│   └── gen-rule-packs.py       # fetches solana-labs/token-list, regenerates packs/
+├── .env                        # gitignored — real secrets go here
+├── .env.example                # committed placeholder values
 ├── .github/workflows/
 │   └── deploy-github-pages.yml # optional: GitHub Actions → GitHub Pages
 │
 ├── crates/
 │   ├── sak-core/               # Shared types (ChainEvent, Decision, TxMeta, …)
-│   ├── sak-guardian/           # Pillar 2 — LiteSVM pre-sign simulation + rules
-│   ├── sak-reflex/             # Pillar 1 — Yellowstone gRPC slot subscriber
-│   ├── sak-state/              # Pillar 3 — ZK-compressed agent state (stub)
-│   ├── sak-sdk/                # Public API: Kernel struct wraps all 3 pillars
+│   ├── sak-guardian/           # LiteSVM pre-sign simulation + indexed rule evaluation
+│   ├── sak-reflex/             # Yellowstone gRPC slot subscriber
+│   ├── sak-state/              # ZK-compressed agent state (stub)
+│   ├── sak-sdk/                # Public API: Kernel struct wraps all pillars
 │   └── sak-bin/                # CLI daemon — runs Guardian + Reflex Engine
 │
 └── demo/
-    ├── race-server/            # Axum WebSocket server (port 3001)
-    ├── race-ui/                # Standalone HTML demo (served on port 4000)
+    ├── race-server/            # Axum HTTP + WS server (port 3001)
+    ├── race-ui/                # Standalone HTML dashboard (port 4000)
     └── tx-generator/           # Generates evil/valid transactions (70/30 mix)
 ```
 
@@ -130,6 +139,7 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 |---|---|---|
 | `SlippageCheck` | `slippage_check` | `max_bps: u64` |
 | `ProgramWhitelist` | `program_whitelist` | `programs: Vec<String>` |
+| `BlockedProgram` | `blocked_program` | `program: String` (single program id — negative counterpart of whitelist; indexed for O(1) dispatch) |
 | `DrainCheck` | `drain_check` | `max_lamports: u64` |
 | `AccountCountCheck` | `account_count_check` | `max_count: usize` |
 | `ComputeUnitsCheck` | `compute_units_check` | `max_units: u32` |
@@ -138,6 +148,64 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 | `ValueCheck` (stub) | `value_check` | always passes |
 | `DecimalsCheck` (stub) | `decimals_check` | always passes |
 
+### Rule packs (`packs/`)
+
+Rules are no longer a single `rules.yaml`. They are loaded from multiple YAML pack files and merged into one `RuleSet` at startup. The production packs (committed in `packs/`) total **2,010 rule instances** across **8 detector types**:
+
+| Pack file | Source | Rule instances |
+|-----------|--------|---------------|
+| `defaults.yaml` | Hand-written baseline (the original 7 rules, split into 6 here since `min_transfer_lamports` is one of them) | 6 |
+| `solana-core.yaml` | 41 curated mainnet programs | 1 (whitelist) |
+| `exploits-blocklist.yaml` | Curated scam program ids | 3 |
+| `tokens-blocklist.yaml` | `solana-labs/token-list` — long-tail mints not in the verified subset | 2,000 |
+| **Total** | | **2,010** |
+
+Regenerate from source:
+```bash
+python3 scripts/gen-rule-packs.py --limit 2000
+# fetches https://raw.githubusercontent.com/solana-labs/token-list/main/…
+# writes packs/{defaults,solana-core,exploits-blocklist,tokens-blocklist}.yaml
+```
+
+Packs are also `include_str!`-embedded into the `race-server` binary as `EMBEDDED_PACKS` so Railway and other cloud runtimes are self-contained. Load order: filesystem `./packs/` (or `RULE_PACKS_DIR` env var) > embedded binary packs > `default_guardian()` hard-coded fallback.
+
+The UI reads `GET /rules/stats` on dashboard init so the badge always shows the real loaded count — never a hardcoded number.
+
+### `RuleSet` indexing (how 2,000 entries stay fast)
+
+`RuleSet::rebuild_indices()` runs once at load time and builds:
+- `indices.blocked_program_by_id: HashMap<program_id, Vec<rule_idx>>` — keyed per program
+- `indices.global: Vec<rule_idx>` — all other rules
+
+`evaluate()` in `evaluator.rs` dispatches in two passes:
+1. For each key in `tx.account_keys()`: look up `blocked_program_by_id[key]` and only run those rules. With 2,000 entries this is O(account_keys), not O(2000).
+2. Linear scan of `indices.global` (typically < 10 rules).
+
+Result: evaluating a tx against 2,010 rules costs roughly the same as evaluating against 7.
+
+### Public API (`lib.rs`)
+
+```rust
+// single file (legacy, still works)
+Guardian::from_yaml("rules.yaml")?;
+
+// multiple packs — preferred for production
+Guardian::from_yaml_files(&["packs/defaults.yaml", "packs/solana-core.yaml", …])?;
+
+// embedded strings (used by race-server binary)
+Guardian::from_yaml_strings(&[("defaults.yaml", include_str!("…/defaults.yaml")), …])?;
+
+// in-memory (tests)
+Guardian::with_rules(vec![Rule::SlippageCheck { name: "s".into(), max_bps: 200 }]);
+
+// evaluation
+guardian.evaluate(&versioned_tx, &tx_meta);      // simulate + evaluate
+guardian.evaluate_raw(account_keys, ixs, meta);  // without LiteSVM simulation
+
+// telemetry
+let s = guardian.stats();  // RuleStats { total, by_kind, packs }
+```
+
 ### Evaluator (`evaluator.rs`)
 
 - `TxView` enum: `Raw` (for `evaluate_raw`) or `Simulated` (for `evaluate` — uses LiteSVM balances)
@@ -145,7 +213,8 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 - Drain detection on `Raw` path parses system program bincode instruction data:
   - Transfer = discriminant `2`, then `u64 LE` lamports at bytes 4–11
   - ComputeBudget uses `0x02` (SetComputeUnitLimit) and `0x03` (SetComputeUnitPrice) with 1-byte discriminants
-- Rules are evaluated in order; first failure short-circuits
+- `BlockedProgram` rules are dispatched via index (see above) — never scanned linearly
+- Global rules run in author order; first rejection short-circuits
 
 ### Simulator (`simulator.rs`)
 
@@ -154,13 +223,29 @@ let decision = guardian.evaluate_raw(account_keys, ixs, meta); // without simula
 - Snapshots pre-balances from `svm.get_account()` before simulation
 - Post-balances come from `sim.post_accounts`
 
-### Tests (`tests/evil_corpus.rs`)
+### Tests
 
-20 integration tests, all must assert `Decision::Reject`. Uses real `LiteSVM`, `solana-keypair`, actual transactions. Run with:
+**`tests/evil_corpus.rs`** — 28 integration tests grounded in real Web3 AI agent attack vectors (SlowMist, Bitget, Positive Web3). All use real `LiteSVM`, `solana-keypair`, actual transactions.
+
+| Tests | What they assert |
+|-------|-----------------|
+| 1–20 | Every pattern in the original evil corpus asserts `Decision::Reject` |
+| 21 | `blocked_program` rule fires when tx touches the blocklisted program |
+| 22 | 2,000-entry blocklist rejects the one tx that hits an entry (index correctness) |
+| 23 | Clean tx against 2,000-entry blocklist is allowed (no false positive) |
+| 24 | `Guardian::stats()` reports truthful counts (total, by_kind breakdown) |
+| 25 | Freysa-style concept substitution — approveTransfer framed as incoming, tx drains 9 SOL |
+| 26 | BEV sandwich victim — MEV bot forces 9,500 bps slippage on agent swap |
+| 27 | MCP context pollution — poisoned server injects unknown program into tx |
+| 28 | Agent-chain laundering — multi-hop through unlisted intermediary program |
+
+**`tests/packs_load.rs`** — integration test that loads all 4 shipped packs from disk and asserts `total >= 2000`, `blocked_program >= 1500`, and all expected detector types are present.
+
 ```bash
-cargo test -p sak-guardian
+cargo test -p sak-guardian          # run all 29 tests
+cargo test -p sak-guardian --test packs_load  # pack-load only
 ```
-Expected: `test result: ok. 20 passed; 0 failed`.
+Expected: `test result: ok. 29 passed; 0 failed` (28 evil corpus + 1 pack-load).
 
 ---
 
@@ -327,12 +412,13 @@ kernel.state().unwrap().set("id", &agent_state)?;
 
 | Method | Path | Description |
 |---|---|---|
+| GET | `/health` | Returns `"ok"` (Railway health check) |
 | GET | `/ws` | WebSocket — streams JSON: tx-generator events AND Yellowstone slot_update events |
 | GET | `/sol-price` | Returns `{"usd": <f64>}`. Proxies CoinGecko with 60s server-side cache. |
 | POST | `/feedback` | Accepts `GuardianFeedback` JSON, stores in memory |
 | GET | `/feedback/summary` | Returns `{total, correct, wrong, accuracy}` |
 | POST | `/evaluate` | **Real Rust Guardian evaluation** — takes intent JSON, runs `sak-guardian::evaluate_raw`, returns decision |
-| POST | `/squads/create-agent-wallet` | **Squads Layer 2 demo** — returns mock smart account PDA, spending limit, Solscan/Squads URLs, SDK snippet. See below. |
+| GET | `/rules/stats` | Returns `{total, by_kind, packs}` — real loaded rule count; UI reads this on dashboard init |
 
 ### WebSocket message types on `/ws`
 
@@ -470,8 +556,8 @@ struct AppState {
     feedback: Arc<Mutex<Vec<GuardianFeedback>>>,
     price: Arc<Mutex<PriceCache>>,
 }
-// Note: evaluate_handler creates a fresh Guardian per request (no state needed).
-// Guardian::with_rules() creates a dormant LiteSVM; evaluate_raw() never calls simulate().
+// Guardian is loaded once at startup from packs/ (or EMBEDDED_PACKS) and held in AppState.
+// evaluate_raw() on the shared guardian is cheap — no LiteSVM simulation on the raw path.
 ```
 
 ---
@@ -628,7 +714,7 @@ Never hardcode the actual token. The `.env` file is gitignored — do not commit
 # Build everything
 cargo build --workspace
 
-# Run Guardian tests (20/20 must pass)
+# Run Guardian tests (29/29 must pass)
 cargo test -p sak-guardian
 
 # Run the demo
@@ -710,7 +796,7 @@ tx-generator ──► sak-guardian ──► sak-core    (evaluate full tx via 
 
 | Component | Status | Notes |
 |---|---|---|
-| `sak-guardian` | Full | 20 tests passing, LiteSVM simulation working |
+| `sak-guardian` | Full | 29 tests passing (28 evil corpus + 1 pack-load), LiteSVM simulation working |
 | `sak-reflex` | Full | Real Yellowstone gRPC connection + reconnect |
 | `sak-state` | Stub | In-memory only, Light Protocol not wired |
 | `sak-sdk` | Full | Kernel API wraps all pillars |
@@ -762,7 +848,6 @@ Keep these in sync when changing demo UX or API wiring.
 | **Demo Mode** | “Try Demo — no API key needed” button on the gate screen sets `isDemoMode = true`. Skips NVIDIA API; uses scripted attack/valid cycle (same FALLBACK_ATTACKS / FALLBACK_VALID). Guardian `/evaluate` still calls real Rust. Orange “Demo Mode” badge shown in header. `initDashboard()` resets all counters and reads `isDemoMode` to show/hide the badge. Stop demo resets `isDemoMode = false`. |
 | **Stop demo** | Header button: clears agent interval, sets `isDemoMode = false`, clears `storedApiKey` + gate input, **Phantom `disconnect()`**, resets wallet UI, runs `__sakSlotCleanup()`, fades back to **gate** screen. |
 | **Slot WebSocket** | `window.__sakStartSlotWs` / `window.__sakSlotCleanup` — started on load and again from `initDashboard()`; cleaned on Stop demo so the socket does not reconnect forever in the background. |
-| **Squads Layer 2 panel** | `initSquadsPolicy()` called from `initDashboard()`. POSTs to `/squads/create-agent-wallet`. `renderSquadsPolicy(data)` populates `#squadsContent` with address, $10 USDC/tx limit, Solscan ↗ and Squads ↗ links, and the `api_note`. Falls back to “Offline” state if race-server unreachable. |
 
 ### Deploy scripts (`sak/`)
 
@@ -780,7 +865,7 @@ Keep these in sync when changing demo UX or API wiring.
 
 ### Local dev (`demo/race-ui`)
 
-- **`vite.config.ts`** proxies `/evaluate`, `/squads`, `/feedback`, `/sol-price`, `/health`, `/ws` to `127.0.0.1:3001` (local `race-server`).
+- **`vite.config.ts`** proxies `/evaluate`, `/feedback`, `/sol-price`, `/health`, `/ws`, `/rules` to `127.0.0.1:3001` (local `race-server`).
 - **`demo/race-ui/index.html`** mirrors root demo; `sak-api-base` meta is often empty so `API_BASE` follows `localhost` during Vite.
 
 ### Future checklist (for maintainers)
@@ -790,41 +875,8 @@ Keep these in sync when changing demo UX or API wiring.
 3. **Secrets:** Never commit real `NVIDIA` / `HELIUS` keys; keep **`.env.example`** as placeholders only; rotate any key that was ever committed.
 4. **CI for `sak_ui-1`:** If a workflow ever needs the Guardian HTML from this repo, check out **both** repos as siblings (`sak` next to `sak_ui-1`) or use a submodule / artifact.
 5. **Custom domains:** Point DNS at Cloudflare Pages for either project; update `siteUrls.ts`, `sak-landing-url`, and CORS allowlists accordingly.
-6. **Squads endpoint:** `/squads/create-agent-wallet` is a mock returning a pre-configured devnet address. To make it real, run `@squads-protocol/multisig` once on devnet, fund the keypair, and hardcode the resulting PDA. Update the Solscan link accordingly.
 
 ---
-
-## POST /squads/create-agent-wallet
-
-**Layer 2 spending-limit policy** via Squads v4 smart accounts. The multisig was created on devnet via `scripts/create-squads-account.ts`.
-
-**Request body:**
-```json
-{
-  "agent_name": "SAK Demo Agent",
-  "spending_limit_usdc": 10
-}
-```
-
-**Response:**
-```json
-{
-  "status": "created",
-  "smart_account": "HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX",
-  "config_authority": "2bzdLiLZdKRgb1zMdndTbDEgtbPwLepfjNPPCQrawaoZ",
-  "spending_limit_usdc": 10.0,
-  "spending_limit_atoms": 10000000,
-  "program_id": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
-  "explorer_url": "https://solscan.io/account/7YzHDnz...?cluster=devnet",
-  "squads_app_url": "https://v4.squads.so/multisigs/7YzHDnz...",
-  "api_note": "Squads API integration — on-chain creation requires a funded keypair...",
-  "sdk_snippet": "// @squads-protocol/multisig ... multisigCreateV2 + spendingLimitCreate"
-}
-```
-
-**Squads v4 program ID:** `SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf`
-
-**To make it real:** install `@squads-protocol/multisig`, fund a devnet keypair (~0.05 SOL), call `multisigCreateV2` + `spendingLimitCreate`, hardcode the resulting PDA. The response structure doesn't change — only the addresses become real.
 
 ---
 
@@ -848,17 +900,15 @@ Added to both `index.html` and `demo/race-ui/index.html`.
 
 ---
 
-## Flow Diagram — Updated Architecture
+## Flow Diagram — Architecture
 
-Both `index.html` and `demo/race-ui/index.html` now show a 4-node flow:
+Both `index.html` and `demo/race-ui/index.html` show a 3-node flow:
 
 ```
-AI Agent → Guardian → Squads → Solana
+AI Agent → Guardian → Solana
 ```
 
-Previously: `AI Agent → Reflex → Guardian → Solana`
-
-**Reason for change:** The flow diagram represents the *transaction flow* (intent → evaluation → policy → chain), not the *subscription flow* (Yellowstone events). Reflex Engine is a background subscriber — it doesn't sit in the transaction path.
+**Reason:** The flow diagram represents the *transaction flow* (intent → evaluation → chain). The Reflex Engine is a background Yellowstone subscriber; it does not sit in the transaction path.
 
 **Node mapping in `animateFlow()`:**
 
@@ -866,10 +916,9 @@ Previously: `AI Agent → Reflex → Guardian → Solana`
 |------|------|---------------|-------|
 | AI Agent | `bot` | purple | 0 |
 | Guardian | `shield` | orange → red/green | 1 |
-| Squads | `lock` | blue → green | 2 (blocked: `x` / red) |
-| Solana | `circle` | #9945ff | 3 (blocked: dimmed) |
+| Solana | `circle` | #9945ff | 2 (blocked: dimmed) |
 
-**Blocked path:** Guardian rejects → shows `Blocked` node at position 3 with red styling, Squads and Solana nodes dim out (never reached).
+**Blocked path:** Guardian rejects → shows `Blocked` node at position 2 with red styling; Solana node dims out (never reached).
 
 **Trace card children index map** (both files):
 
@@ -878,15 +927,12 @@ Previously: `AI Agent → Reflex → Guardian → Solana`
 | 0 | Agent node |
 | 1 | Seg: Agent→Guardian |
 | 2 | Guardian node |
-| 3 | Seg: Guardian→Squads/Blocked |
-| 4 | Squads or Blocked node |
-| 5 | Seg: Squads→Solana |
-| 6 | Solana node |
+| 3 | Seg: Guardian→Solana/Blocked |
+| 4 | Solana or Blocked node |
 
 Animation sequence:
 - 350ms: seg1 orange, node2 (Guardian) becomes `sim...`
-- 750ms: node2 resolves (red/green), seg3 + node4 (Squads/Blocked) activate
-- 1150ms: node4 (Squads) resolves `$10 ✓`, seg5 green, node6 (Solana) activates *(allowed only)*
+- 750ms: node2 resolves (red/green), seg3 + node4 (Solana/Blocked) activate
 - 1100/1600ms: `.trace-outcome` fades in with rule/sig info
 
 ---
@@ -895,13 +941,13 @@ Animation sequence:
 
 | Component | Status | Notes |
 |---|---|---|
-| `sak-guardian` | Full | 20 tests passing, LiteSVM simulation working |
+| `sak-guardian` | Full | 29 tests passing (28 evil corpus + 1 pack-load), LiteSVM simulation working |
 | `sak-reflex` | Full | Real Yellowstone gRPC connection + reconnect |
 | `sak-state` | **Stub** | In-memory only, Light Protocol not wired. README updated to reflect this. |
 | `sak-sdk` | Full | Kernel API wraps all pillars |
 | `sak-bin` | Full | Spawns Reflex Engine, logs slots |
-| `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` + `/squads/create-agent-wallet` + Yellowstone slot broadcast |
-| `race-ui` | Full | Demo Mode, NVIDIA NIM → real `/evaluate`, Squads panel, SVG architecture diagram, live slot counter |
+| `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` + `/rules/stats` + Yellowstone slot broadcast |
+| `race-ui` | Full | Demo Mode, NVIDIA NIM → real `/evaluate`, `/rules/stats` badge, SVG architecture diagram, live slot counter |
 | Demo recording | Pending | |
 | Deployment | Partial | See **Hosted demo, Cloudflare & Railway** |
 

@@ -723,6 +723,12 @@ const FALLBACK_ATTACKS = [
   {description:'drain entire balance',slippage_bps:0,amount_lamports:9950000000,program_ids:['11111111111111111111111111111111']},
   {description:'unknown aggregator program',slippage_bps:150,amount_lamports:1000000,program_ids:['Ax7fK9mN2pQrS4tU6vW8xYzAb1cD2eHackProgram']},
   {description:'maximum compute units',slippage_bps:200,amount_lamports:100000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'],compute_units:1500000},
+  // Freysa-style concept substitution: "approveTransfer" reframed as incoming deposit, but tx drains 5 SOL
+  {description:'approve incoming transfer from treasury (concept substitution)',slippage_bps:0,amount_lamports:5000000000,program_ids:['11111111111111111111111111111111']},
+  // Memory injection: agent memory poisoned with attacker address; intent looks like a routine rebalance
+  {description:'routine portfolio rebalance — urgent, skip checks',slippage_bps:9500,amount_lamports:3000000000,program_ids:['11111111111111111111111111111111']},
+  // Social engineering: "emergency" framing convinces LLM a large transfer is safe
+  {description:'emergency safety transfer — send all SOL to cold wallet',slippage_bps:0,amount_lamports:9000000000,program_ids:['11111111111111111111111111111111']},
   {description:'large Jupiter swap within guardian limits',slippage_bps:150,amount_lamports:250000000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']}
 ];
 
@@ -765,20 +771,29 @@ function evaluateIntent(intent) {
 
   // Rule 1: slippage
   if (slip > MAX_SLIPPAGE_BPS) {
+    const desc = intent.description || '';
+    const slipLabel = desc.includes('rebalance') ? 'Memory Injection — Poisoned Rebalance'
+                    : slip >= 9000 ? '99% Slippage Swap'
+                    : 'High-Slippage Swap';
     return blocked(
       'max_slippage',
       slip + 'bps exceeds maximum ' + MAX_SLIPPAGE_BPS + 'bps',
-      slip >= 9000 ? '99% Slippage Swap' : 'High-Slippage Swap',
+      slipLabel,
       slip >= 5000 ? 'critical' : 'high'
     );
   }
 
   // Rule 2: drain (amount > 1 SOL)
   if (lamps > MAX_LAMPORTS) {
+    const desc = intent.description || '';
+    const attackLabel = desc.includes('concept substitution') ? 'Concept Substitution (Freysa-style)'
+                      : desc.includes('emergency') ? 'Social Engineering — Emergency Drain'
+                      : desc.includes('rebalance') ? 'Memory Injection — Poisoned Rebalance'
+                      : 'Drain Balance';
     return blocked(
       'max_account_drain',
       solAmt.toFixed(4) + ' SOL exceeds maximum 1 SOL',
-      'Drain Balance',
+      attackLabel,
       lamps > 5_000_000_000 ? 'critical' : 'high'
     );
   }
