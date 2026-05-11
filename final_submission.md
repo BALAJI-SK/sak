@@ -272,7 +272,6 @@ cloudflare pages           ✅ Live on sak-devnet-test.pages.dev
 | Name | Role |
 |---|---|
 | Balaji Segu Krishnaiah | Rust kernel, Guardian, Reflex Engine, demo |
-| Prateek C | Architecture, SDK design |
 | Sai Shreyas Gubbi Harish | Demo UI, integration |
 | Tejas Shiv Kumar | Testing, documentation |
 
