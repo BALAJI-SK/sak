@@ -147,8 +147,10 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3001").await.unwrap();
-    info!("WebSocket server running on ws://localhost:3001");
+    let port = std::env::var("PORT").unwrap_or_else(|_| "3001".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    info!("WebSocket server running on ws://{}", addr);
     axum::serve(listener, app).await.unwrap();
 }
 

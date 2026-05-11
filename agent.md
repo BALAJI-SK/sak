@@ -309,17 +309,65 @@ kernel.state().unwrap().set("id", &agent_state)?;
 ## demo/race-server
 
 **Port:** 3001  
-**Framework:** Axum 0.7 + tokio-tungstenite
+**Framework:** Axum 0.7 + tokio-tungstenite  
+**Deps (relevant):** `sak-guardian`, `sak-reflex`, `sak-core`
 
 ### Endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/ws` | WebSocket — streams JSON transaction events |
+| GET | `/ws` | WebSocket — streams JSON: tx-generator events AND Yellowstone slot_update events |
 | GET | `/sol-price` | Returns `{"usd": <f64>}`. Proxies CoinGecko with 60s server-side cache. |
 | POST | `/feedback` | Accepts `GuardianFeedback` JSON, stores in memory |
 | GET | `/feedback/summary` | Returns `{total, correct, wrong, accuracy}` |
 | POST | `/evaluate` | **Real Rust Guardian evaluation** — takes intent JSON, runs `sak-guardian::evaluate_raw`, returns decision |
+
+### WebSocket message types on `/ws`
+
+Two distinct message shapes are broadcast on the same channel:
+
+```json
+// tx-generator events — NO "type" field; UI handles as tx log entry
+{"id":"…","timestamp":…,"decision":"rejected","rule":"max_slippage",…}
+
+// Yellowstone Reflex Engine — has "type" field; UI handles as slot counter
+{"type":"slot_update","slot":312345678}
+```
+
+**UI routing rule:** `if (parsed.type === 'slot_update')` → update slot counter; else → handle as tx event.
+
+### Yellowstone Reflex Engine in race-server
+
+Spawned at startup in `main()`. Guarded by `YELLOWSTONE_TOKEN` env var:
+
+```rust
+let token = std::env::var("YELLOWSTONE_TOKEN").unwrap_or_default();
+if token.is_empty() {
+    tracing::warn!("YELLOWSTONE_TOKEN not set — Yellowstone Reflex Engine disabled");
+} else {
+    let config = ReflexConfig::from_env();
+    let (chain_tx, mut chain_rx) = tokio::sync::mpsc::channel::<ChainEvent>(256);
+    let ws_tx = tx.clone();  // tx = broadcast::Sender<String> shared with /ws handler
+
+    tokio::spawn(async move {
+        if let Err(e) = sak_reflex::start(config, chain_tx).await {
+            tracing::error!("Reflex Engine fatal: {}", e);
+        }
+    });
+
+    tokio::spawn(async move {
+        while let Some(event) = chain_rx.recv().await {
+            if let ChainEvent::SlotUpdate { slot, .. } = event {
+                let msg = serde_json::json!({ "type": "slot_update", "slot": slot }).to_string();
+                let _ = ws_tx.send(msg);
+            }
+        }
+        tracing::warn!("Reflex Engine channel closed");
+    });
+}
+```
+
+If `YELLOWSTONE_TOKEN` is missing: server starts normally, `/evaluate` and all other endpoints work, the slot counter in the UI just stays `—`.
 
 ### POST /evaluate — the real Guardian call
 
@@ -421,7 +469,9 @@ struct AppState {
 **File:** `demo/race-ui/index.html` — standalone HTML file with inline CSS + JS. NOT a Vite/React app.
 
 **Served on:** port 4000 (static file server, e.g. `python3 -m http.server 4000`)  
-**Connects to:** `http://localhost:3001` for price, evaluation, and feedback
+**Connects to:**
+- `http://localhost:3001` — REST: price, evaluate, feedback
+- `ws://localhost:3001/ws` — WebSocket: live slot counter (Yellowstone) + tx-generator events (not used for evaluation, just presence)
 
 ### Guardian evaluation flow
 
@@ -449,12 +499,52 @@ NVIDIA NIM API → intent JSON → evaluateWithBackend(intent)
 - Whitelist: same 10 program IDs as the Rust `default_guardian()`
 - Loss USD computed from real `solPrice` variable
 
+### Live slot counter
+
+`connectSlotWS()` IIFE runs immediately on page load (before the gate screen is dismissed):
+
+```javascript
+(function connectSlotWS() {
+  const dot = document.getElementById('slotDot');
+  const counter = document.getElementById('slotCounter');
+  let ws;
+
+  function connect() {
+    try { ws = new WebSocket('ws://localhost:3001/ws'); } catch (_) { return; }
+
+    ws.onmessage = function(e) {
+      let parsed;
+      try { parsed = JSON.parse(e.data); } catch (_) { return; }
+      if (parsed.type === 'slot_update' && parsed.slot) {
+        counter.textContent = Number(parsed.slot).toLocaleString();
+        dot.style.opacity = '1';
+        dot.classList.add('sak-dot--pulse');
+        setTimeout(() => { dot.classList.remove('sak-dot--pulse'); dot.style.opacity = '0.6'; }, 300);
+      }
+      // non-slot_update messages are silently ignored here (tx-generator events
+      // are NOT surfaced through this WS handler — the UI builds entries from
+      // the NVIDIA NIM agent loop, not from the tx-generator subprocess)
+    };
+
+    ws.onclose = function() { dot.style.opacity = '0.2'; setTimeout(connect, 3000); };
+    ws.onerror = function() { ws.close(); };
+  }
+
+  connect();
+})();
+```
+
+The slot counter lives in the footer bar alongside "Guardian Accuracy", "Decisions", and "False Positives". It shows `—` until the first slot arrives. The dot pulses purple on each tick.
+
+**Requires:** `YELLOWSTONE_TOKEN` set in race-server's env. Without it, the WebSocket still connects (no crash), but only tx-generator events arrive — the counter stays `—`.
+
 ### Key JS functions
 
 - `fetchSolPrice()` — calls `http://localhost:3001/sol-price` (proxied, not CoinGecko directly)
 - `agentLoop()` / `_agentLoopBody()` — every 8 seconds: fetches SOL price → calls NVIDIA NIM → `evaluateWithBackend()` → updates UI
 - `callNVIDIA(prompt)` — calls NVIDIA NIM API (`minimaxai/minimax-m2.7` model) via Vite proxy at `/api/nvidia`
 - `agentRunning` guard — prevents concurrent `agentLoop` invocations; interval cleared during rate-limit backoff
+- `connectSlotWS()` — IIFE, connects to `ws://localhost:3001/ws`, routes `slot_update` messages to footer counter
 
 ### NVIDIA attack prompts
 
@@ -570,6 +660,12 @@ cd demo/race-ui && python3 -m http.server 4000  # Terminal 2 — serves HTML on 
 
 16. **`via_backend` flag on UI entries.** When `evaluateWithBackend()` gets a successful response from `/evaluate`, it sets `entry.via_backend = true`. The log card renders a purple **⚙ Rust** badge. If the server is unreachable, `evaluateIntent()` (JS fallback) is called instead and an orange **JS fallback** badge is shown.
 
+17. **Yellowstone TLS — `tls-native-roots` feature is required.** Without it, `ClientTlsConfig::with_native_roots()` is a no-op (guarded by `#[cfg(feature = "tls-native-roots")]` inside tonic). The result is a silent TLS failure: `"gRPC transport error: transport error"`. Always list both `"tls"` and `"tls-native-roots"` in tonic's Cargo features and call `.tls_config(ClientTlsConfig::new().with_native_roots())?` explicitly.
+
+18. **WebSocket carries two message types; route by `type` field.** tx-generator events have no `type` field. Yellowstone slot events have `"type":"slot_update"`. The `connectSlotWS()` handler checks `parsed.type === 'slot_update'` and ignores everything else. The main NVIDIA agent loop does NOT read from the WebSocket — it generates intents independently via the NIM API.
+
+19. **`YELLOWSTONE_TOKEN` missing = graceful degradation, not panic.** race-server checks the env var at startup. If empty: logs a warning, skips spawning the Reflex Engine tasks. All REST endpoints (`/evaluate`, `/sol-price`, `/feedback`) still work. The slot counter in the UI stays `—`. This is intentional — the demo should not crash when run without a Yellowstone subscription.
+
 ---
 
 ## Crate Dependency Graph
@@ -580,6 +676,7 @@ sak-bin ──► sak-sdk ──► sak-guardian ──► sak-core
               sak-state ──────────────────┘
 
 race-server ──► sak-guardian ──► sak-core     (evaluate_raw → POST /evaluate)
+             ├──► sak-reflex  ──► sak-core     (Yellowstone slot stream → /ws broadcast)
              └──► sak-core
 
 tx-generator ──► sak-guardian ──► sak-core    (evaluate full tx via LiteSVM)
@@ -597,7 +694,7 @@ tx-generator ──► sak-guardian ──► sak-core    (evaluate full tx via 
 | `sak-state` | Stub | In-memory only, Light Protocol not wired |
 | `sak-sdk` | Full | Kernel API wraps all pillars |
 | `sak-bin` | Full | Spawns Reflex Engine, logs slots |
-| `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` (real Rust Guardian) |
-| `race-ui` | Full | Standalone HTML demo, NVIDIA NIM → real `/evaluate` backend, JS fallback |
+| `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` + Yellowstone slot broadcast |
+| `race-ui` | Full | Standalone HTML demo, NVIDIA NIM → real `/evaluate` backend, JS fallback, live slot counter |
 | Demo recording | Pending | |
 | Deployment | Pending | |

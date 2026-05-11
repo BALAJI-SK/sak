@@ -2,6 +2,8 @@
 
 > Give AI agents same-slot reflexes, a pre-sign kill switch, and 1000× cheaper state storage — in one Rust kernel that plugs under any existing agent framework.
 
+[![Integrate in 60 seconds →](https://img.shields.io/badge/Integrate-60_seconds-7c3aed)](INTEGRATE.md)
+
 **SAK** is a Rust middleware kernel that sits between an LLM-driven agent and the Solana blockchain. It is the **execution and safety layer** — not the AI, not the blockchain, not the agent framework.
 
 ---

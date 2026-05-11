@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SAK — Hackathon Submission · Colosseum Frontier 2026</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --border: #1e1e2e;
+    --green: #00ff88;
+    --red: #ff3366;
+    --purple: #7c3aed;
+    --orange: #ff9900;
+    --text: #e2e2ee;
+    --muted: #888899;
+    --accent: #00ff88;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', 'Fira Mono', monospace;
+    font-size: 14px;
+    line-height: 1.7;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+
+  h1 { font-size: 2rem; color: var(--green); margin-bottom: 4px; letter-spacing: -0.5px; }
+  h2 { font-size: 1rem; color: var(--purple); text-transform: uppercase; letter-spacing: 2px; margin: 48px 0 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 0.9rem; color: var(--orange); margin: 24px 0 8px; }
+
+  .tagline { font-size: 1.1rem; color: var(--muted); margin-bottom: 32px; }
+  .deadline { display: inline-block; background: var(--red); color: #fff; font-size: 0.75rem; padding: 2px 10px; border-radius: 4px; margin-bottom: 32px; letter-spacing: 1px; }
+
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.72rem; font-weight: 700; margin-right: 6px; margin-bottom: 4px; letter-spacing: 0.5px; }
+  .pill-green { background: rgba(0,255,136,0.12); color: var(--green); border: 1px solid rgba(0,255,136,0.3); }
+  .pill-purple { background: rgba(124,58,237,0.15); color: #a78bfa; border: 1px solid rgba(124,58,237,0.4); }
+  .pill-orange { background: rgba(255,153,0,0.12); color: var(--orange); border: 1px solid rgba(255,153,0,0.3); }
+  .pill-red { background: rgba(255,51,102,0.12); color: var(--red); border: 1px solid rgba(255,51,102,0.3); }
+
+  .copybox {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--purple);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin: 12px 0 24px;
+    position: relative;
+  }
+  .copybox .label {
+    font-size: 0.68rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+  }
+  .copybox p { margin-bottom: 12px; color: var(--text); }
+  .copybox p:last-child { margin-bottom: 0; }
+
+  .copy-btn {
+    position: absolute;
+    top: 12px; right: 12px;
+    background: var(--border);
+    border: 1px solid #333350;
+    color: var(--muted);
+    font-size: 0.7rem;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 12px 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+  .card .title { font-size: 0.72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .card .value { font-size: 1.1rem; color: var(--green); font-weight: 700; }
+  .card .sub { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+
+  .checklist { list-style: none; margin: 12px 0; }
+  .checklist li { padding: 6px 0; display: flex; align-items: flex-start; gap: 10px; }
+  .checklist li .icon { flex-shrink: 0; margin-top: 2px; }
+  .done .icon { color: var(--green); }
+  .todo .icon { color: var(--orange); }
+  .block .icon { color: var(--red); }
+
+  .timeline { margin: 16px 0; }
+  .timeline-item { display: flex; gap: 16px; margin-bottom: 12px; align-items: flex-start; }
+  .time { color: var(--purple); width: 80px; flex-shrink: 0; font-size: 0.82rem; font-weight: 700; }
+  .beat-title { color: var(--orange); font-weight: 700; font-size: 0.85rem; }
+  .beat-body { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+
+  .track-rec {
+    background: linear-gradient(135deg, rgba(124,58,237,0.1), rgba(0,255,136,0.05));
+    border: 1px solid rgba(124,58,237,0.4);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin: 12px 0;
+  }
+  .track-rec .track-name { font-size: 1.3rem; color: var(--green); font-weight: 700; margin-bottom: 4px; }
+  .track-rec .track-reason { color: var(--muted); font-size: 0.85rem; }
+
+  code { background: rgba(255,255,255,0.06); padding: 1px 5px; border-radius: 3px; font-family: inherit; font-size: 0.9em; color: #a78bfa; }
+
+  .note { background: rgba(255,153,0,0.06); border: 1px solid rgba(255,153,0,0.25); border-radius: 6px; padding: 10px 16px; font-size: 0.82rem; color: var(--orange); margin: 12px 0; }
+  .note strong { color: #ffcc55; }
+
+  a { color: var(--purple); text-decoration: none; }
+  a:hover { color: var(--green); }
+
+  .section-intro { color: var(--muted); font-size: 0.85rem; margin-bottom: 16px; }
+
+  .winner-ref { font-size: 0.78rem; color: var(--muted); font-style: italic; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+  @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="deadline">⚡ DEADLINE: May 11, 2026 — Colosseum Frontier</div>
+
+<h1>SAK — Solana Agent Kernel</h1>
+<div class="tagline">The safety kernel for LLM-driven Solana agents</div>
+
+<div>
+  <span class="pill pill-purple">AI / Agents</span>
+  <span class="pill pill-green">Infrastructure</span>
+  <span class="pill pill-orange">Rust</span>
+  <span class="pill pill-green">Devnet Live</span>
+  <span class="pill pill-orange">Solo → 3-person team</span>
+</div>
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>01 · Track Recommendation</h2>
+
+<div class="track-rec">
+  <div class="track-name">✦ Primary: AI / Agents</div>
+  <div class="track-reason">SAK is infrastructure <em>for</em> AI agents — the safety kernel that sits between an LLM's output and an on-chain signature. This is the pattern that won Cypherpunk 2025 (MCPay), Breakout 2025 (Latinum), and Hyperdrive 2023 (FluxBot): "AI agents that pay/act on-chain" beats "AI-powered dashboard." Every transaction SAK evaluates was generated by NVIDIA NIM.</div>
+</div>
+<div class="track-rec" style="margin-top:8px; background: linear-gradient(135deg,rgba(255,153,0,0.06),rgba(255,153,0,0.02)); border-color: rgba(255,153,0,0.3);">
+  <div class="track-name" style="color:var(--orange); font-size:1rem;">✦ Fallback: Infrastructure</div>
+  <div class="track-reason">Every Colosseum grand champion was an infrastructure project. If Frontier doesn't have a dedicated AI/Agents track, Infrastructure is the right call — frame SAK as "the safety SDK for any Solana agent project."</div>
+</div>
+
+<div class="winner-ref">📊 Winner pattern: AI x Crypto has 3 track winners in 2024–2025 (FluxBot $50K grand champion, MCPay $25K, Latinum $25K). Infrastructure grand champions: TapeDrive, Ore, Underdog API, Reflect, FluxBot. SAK fits both.</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>02 · Project Name &amp; Tagline</h2>
+
+<div class="copybox">
+  <div class="label">Copy → Submission form: Project Name</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+  <p>SAK — Solana Agent Kernel</p>
+</div>
+
+<div class="copybox">
+  <div class="label">Copy → Submission form: One-line Tagline</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+  <p>A Rust middleware kernel that intercepts every LLM-generated transaction before it touches the chain — pre-sign simulation, rule-based safety, same-slot reflex.</p>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>03 · Project Description</h2>
+<div class="section-intro">200–500 words. Structured for scanability — judges spend 2–5 min per submission.</div>
+
+<div class="copybox">
+  <div class="label">Copy → Submission form: Full Description</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+
+  <p><strong>The problem</strong><br>
+  LLM agents are already moving real SOL — and they can be jailbroken, hallucinated into 99% slippage swaps, or tricked into draining wallets to unknown programs. There is no standard safety layer between a language model's output and an on-chain signature. Every agent developer is re-implementing ad-hoc checks, in different languages, with no shared test corpus of attacks.</p>
+
+  <p><strong>The solution</strong><br>
+  SAK (Solana Agent Kernel) is a Rust middleware kernel that intercepts every LLM-generated transaction before signing. Every intent is simulated locally via LiteSVM — zero on-chain cost, no devnet burn. A rule engine then evaluates slippage, drain amount, program whitelist, compute budget, and priority fee. Blocked transactions never reach <code>sendTransaction</code>. Allowed transactions do, with a full audit trail.</p>
+
+  <p><strong>Why Solana</strong><br>
+  This is only viable on Solana because transaction simulation is deterministic and fast enough to run synchronously in the agent loop. SAK uses three Solana-native primitives: <code>LiteSVM</code> for local pre-sign simulation, Yellowstone Geyser gRPC for same-slot push events (real devnet slots at ~2.9/sec), and Light Protocol ZK-compressed accounts for 100–1000× cheaper agent state. The kernel is impossible to build this way on EVM chains where simulation is expensive and slot times are slow.</p>
+
+  <p><strong>Technical highlights</strong><br>
+  The kernel is structured as three independent Rust crates. <code>sak-guardian</code>: LiteSVM simulation + YAML-configurable rule engine, 20 integration tests covering the full evil corpus (slippage, drain, unknown program, compute bomb). <code>sak-reflex</code>: Yellowstone Geyser gRPC subscriber with auto-reconnect, emitting <code>ChainEvent</code> into an mpsc channel at real devnet cadence. <code>sak-state</code>: ZK-compressed agent state via Light Protocol (in-memory stub with full API, flush-to-ZK pending). The live demo uses NVIDIA NIM to generate adversarial trade intents, which are evaluated by real Rust Guardian code via an Axum server — no JavaScript duplicating logic.</p>
+
+  <p><strong>What's next</strong><br>
+  Core kernel is functional and tested. Immediate next steps: mainnet deployment, full Light Protocol ZK-compression wiring for <code>sak-state</code>, and a hosted Guardian API so any Solana agent project can integrate safety checks without running their own Rust server. Longer term: NPM and Python client SDKs for non-Rust agents, and a community-maintained evil corpus that grows with new attack patterns.</p>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>04 · Key Stats (put in description or sidebar)</h2>
+
+<div class="grid2">
+  <div class="card">
+    <div class="title">Guardian tests</div>
+    <div class="value">20 / 20</div>
+    <div class="sub">Evil corpus — all passing</div>
+  </div>
+  <div class="card">
+    <div class="title">Eval latency</div>
+    <div class="value">&lt; 20 ms</div>
+    <div class="sub">Pre-sign simulation via LiteSVM</div>
+  </div>
+  <div class="card">
+    <div class="title">Yellowstone cadence</div>
+    <div class="value">~2.9 slots/sec</div>
+    <div class="sub">Live devnet, real gRPC stream</div>
+  </div>
+  <div class="card">
+    <div class="title">On-chain cost to evaluate</div>
+    <div class="value">0 lamports</div>
+    <div class="sub">All simulation is local</div>
+  </div>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>05 · Demo Video Script</h2>
+<div class="section-intro">3 minutes exactly. Record against a live devnet session. Use OBS or QuickTime. No intros — start with the problem.</div>
+
+<div class="timeline">
+  <div class="timeline-item">
+    <div class="time">0:00–0:20</div>
+    <div>
+      <div class="beat-title">Hook — the problem (20 sec)</div>
+      <div class="beat-body">"An AI agent just tried to drain your wallet. 99% slippage. 9.95 SOL. It was generated by an LLM — and it almost signed. SAK caught it in 19 milliseconds, before a single lamport moved. This is a safety kernel for Solana AI agents."</div>
+    </div>
+  </div>
+  <div class="timeline-item">
+    <div class="time">0:20–0:40</div>
+    <div>
+      <div class="beat-title">Solution overview (20 sec)</div>
+      <div class="beat-body">"Three pillars: Guardian intercepts and simulates every transaction locally. Reflex subscribes to Yellowstone Geyser for same-slot event push. State stores agent history via ZK-compressed accounts. Everything in Rust. Here's the kernel in one diagram." [show crate dep graph from agent.md]</div>
+    </div>
+  </div>
+  <div class="timeline-item">
+    <div class="time">0:40–2:20</div>
+    <div>
+      <div class="beat-title">Live demo (100 sec)</div>
+      <div class="beat-body">
+        1. Open <code>http://localhost:4000</code> — show the gate screen. Bottom-left: live slot counter pulsing from Yellowstone Geyser on devnet. (~2.9 slots/sec)<br><br>
+        2. Dismiss gate. Dashboard loads. Say: "NVIDIA NIM generates a trade intent every 8 seconds."<br><br>
+        3. Watch first intent arrive: a legitimate Jupiter swap. Show the Rust badge (⚙ Rust) — the Guardian ran real Rust code, not JavaScript. Decision: ALLOW.<br><br>
+        4. Next attack: 99% slippage. Show the red BLOCKED card. "rule: max_slippage — 9900 bps exceeds the 200 bps limit." Eval time: 19ms. Loss prevented: shown in USD.<br><br>
+        5. Next: drain attack — 9.95 SOL to System Program. "rule: max_account_drain — 9.95 SOL exceeds 1 SOL limit." Blocked.<br><br>
+        6. Next: unknown program (unwhitelisted contract). "rule: allowed_programs." Blocked.<br><br>
+        7. Show the footer: Guardian Accuracy tracker climbing. Decisions counter.
+      </div>
+    </div>
+  </div>
+  <div class="timeline-item">
+    <div class="time">2:20–2:50</div>
+    <div>
+      <div class="beat-title">Technical highlight (30 sec)</div>
+      <div class="beat-body">"Every evaluation goes through a real Rust POST /evaluate endpoint — not JavaScript. LiteSVM simulates the transaction locally: pre-balances, post-balances, instruction parsing. The rule engine fires in under 20ms. Here's the evil corpus: <code>cargo test -p sak-guardian</code> — 20 tests, 20 passing."  [show terminal output or screenshot]</div>
+    </div>
+  </div>
+  <div class="timeline-item">
+    <div class="time">2:50–3:00</div>
+    <div>
+      <div class="beat-title">Wrap up (10 sec)</div>
+      <div class="beat-body">"SAK is open source. Setup is three commands. GitHub link in the description. Star the repo if this is useful — we're adding a hosted API and Python/NPM SDKs next. Thanks, Colosseum."</div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Recording tips:</strong> Cut dead time between attacks. The 8-second NVIDIA interval is too long for video — manually trigger or pre-record a session with attacks already queued. Don't show terminal for more than 10 seconds. Show the Rust badge prominently — it differentiates you from JS demos.
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>06 · Technical Demo Description</h2>
+<div class="section-intro">Separate from pitch video — Colosseum requires both. This is the implementation walkthrough.</div>
+
+<div class="copybox">
+  <div class="label">Copy → "Technical Demo" field (2–3 min walkthrough)</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+
+  <p><strong>Stack:</strong> Rust (Axum, tokio, LiteSVM, yellowstone-grpc-client, tonic), standalone HTML + vanilla JS frontend, NVIDIA NIM (<code>minimax-m2.7</code>) for live agent intent generation.</p>
+
+  <p><strong>Guardian (<code>sak-guardian</code>):</strong> Every evaluation calls <code>guardian.evaluate_raw(account_keys, instructions, tx_meta)</code>. For the demo, this is exposed via <code>POST /evaluate</code> on the Axum server. The rule engine parses instruction data directly — system transfer discriminants (4-byte + 8-byte u64 LE), ComputeBudget discriminants (1-byte), program IDs. First rule match short-circuits. Rules are YAML-configurable via <code>rules.yaml</code>. 20 integration tests against a real LiteSVM instance confirm the evil corpus.</p>
+
+  <p><strong>Reflex Engine (<code>sak-reflex</code>):</strong> Connects to Yellowstone Geyser gRPC on devnet (<code>sol-devnet-yellowstone-grpc.rpcfast.com:443</code>) with TLS native roots. Subscribes to slot updates at <code>CommitmentLevel::Processed</code>. Emits <code>ChainEvent::SlotUpdate</code> into an mpsc channel. The race-server forwards these to the WebSocket broadcast channel as <code>{"type":"slot_update","slot":N}</code> — the UI displays a pulsing live slot counter.</p>
+
+  <p><strong>Integration:</strong> NVIDIA NIM → intent JSON → <code>POST /evaluate</code> → Rust <code>evaluate_raw()</code> → verdict JSON → UI renders BLOCKED/ALLOWED card with ⚙ Rust badge. If the server is unreachable, a JS fallback with the same rule thresholds runs instead (shown with orange JS badge).</p>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>07 · Why Solana Section</h2>
+
+<div class="copybox">
+  <div class="label">Copy → "Why Solana?" field</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+  <p>Three Solana-native primitives make SAK possible. LiteSVM: deterministic local simulation fast enough (&lt;20ms) to run synchronously in any agent loop — this doesn't exist on EVM. Yellowstone Geyser: gRPC push stream for same-slot event delivery at ~2.9 slots/sec, enabling agents to react within the same block they observe. Light Protocol ZK-compressed accounts: 100–1000× cheaper state storage for agent history and open positions — necessary when agents are writing state on every transaction decision.</p>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>08 · Team</h2>
+
+<div class="copybox">
+  <div class="label">Copy → Team section</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+  <p><strong>S K Balaji</strong> — Lead engineer. Rust, Solana programs, AI agent infrastructure. Built the Guardian simulation engine, Reflex Yellowstone integration, and demo system.<br><br>
+  <strong>[Teammate 2 — Name]</strong> — [Role / background]. [1 sentence on their contribution].<br><br>
+  <strong>[Teammate 3 — Name]</strong> — [Role / background]. [1 sentence on their contribution].<br><br>
+  <em>GitHub · Twitter links go here</em></p>
+</div>
+
+<div class="note"><strong>Action:</strong> Fill in teammate names, roles, and GitHub/Twitter links before submitting. Judges look at GitHub profiles.</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>09 · Links Checklist</h2>
+
+<ul class="checklist">
+  <li class="done"><span class="icon">✓</span> GitHub repo — public (fill in URL below)</li>
+  <li class="done"><span class="icon">✓</span> Static page / landing online</li>
+  <li class="todo"><span class="icon">○</span> Demo simulation — currently local only (localhost:3001 + localhost:4000) → <strong>deploy before submit</strong></li>
+  <li class="todo"><span class="icon">○</span> Demo video — pending recording</li>
+  <li class="todo"><span class="icon">○</span> README Quick Start — judges must be able to run it in 3 commands</li>
+  <li class="todo"><span class="icon">○</span> Team GitHub/Twitter links</li>
+</ul>
+
+<div class="note">
+  <strong>Demo deployment options (fastest path for today's deadline):</strong><br><br>
+  Option A — Railway.app: <code>railway init &amp;&amp; railway up</code> in <code>demo/race-server</code>. Set <code>YELLOWSTONE_TOKEN</code> as env var in Railway dashboard. Free tier is enough for a hackathon demo.<br><br>
+  Option B — Fly.io: <code>fly launch</code> in <code>demo/race-server</code>. Dockerfile not required — Fly detects Rust projects.<br><br>
+  Option C — Render.com: Connect GitHub repo, select <code>demo/race-server</code> as root, set start command to <code>cargo run -p race-server</code>. Slowest cold start but easiest setup.<br><br>
+  The race-ui HTML can be deployed to GitHub Pages, Netlify, or Vercel in under 2 minutes. Update the <code>localhost:3001</code> references in <code>index.html</code> to point to your deployed server URL.
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>10 · README Quick Start (for judges)</h2>
+
+<div class="copybox">
+  <div class="label">Add this to the top of README.md</div>
+  <button class="copy-btn" onclick="copy(this)">Copy</button>
+  <p><strong># SAK — Solana Agent Kernel</strong><br>
+  > A Rust middleware kernel for LLM-driven Solana agents. Pre-sign simulation, rule-based safety, same-slot Yellowstone reflex.<br><br>
+  <strong>## Quick Start (devnet)</strong><br><br>
+  <code>
+  # 1. Clone and build<br>
+  git clone https://github.com/[YOUR_REPO]/sak &amp;&amp; cd sak<br>
+  cargo build --workspace<br><br>
+  # 2. Set env vars<br>
+  cp .env.example .env<br>
+  # Edit .env — add YELLOWSTONE_TOKEN for live slot stream (optional)<br><br>
+  # 3. Run the demo<br>
+  cargo run -p race-server &amp;        # Terminal 1 — API server on :3001<br>
+  cd demo/race-ui &amp;&amp; python3 -m http.server 4000  # Terminal 2 — UI on :4000<br>
+  open http://localhost:4000<br>
+  </code><br>
+  <strong>## Run the test suite</strong><br>
+  <code>cargo test -p sak-guardian   # 20/20 must pass</code><br><br>
+  <strong>## Architecture</strong><br>
+  See <code>agent.md</code> for the full crate map and technical decisions.</p>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>11 · Judging Criteria Self-Score</h2>
+
+<div class="grid2">
+  <div class="card">
+    <div class="title">Functionality (30%)</div>
+    <div class="value" style="color:var(--green)">Strong ✓</div>
+    <div class="sub">20/20 tests. Working demo. Live devnet Yellowstone. Real Rust backend called by UI.</div>
+  </div>
+  <div class="card">
+    <div class="title">Innovation (25%)</div>
+    <div class="value" style="color:var(--green)">Strong ✓</div>
+    <div class="sub">"First safety kernel for Solana AI agents" — novel primitive, not an incremental improvement.</div>
+  </div>
+  <div class="card">
+    <div class="title">Technical Execution (20%)</div>
+    <div class="value" style="color:var(--green)">Strong ✓</div>
+    <div class="sub">Rust crates, proper testing, real gRPC integration, LiteSVM simulation. Judges will read the code.</div>
+  </div>
+  <div class="card">
+    <div class="title">Potential Impact (15%)</div>
+    <div class="value" style="color:var(--orange)">Medium</div>
+    <div class="sub">Quantify: "Every Solana agent project that ships without SAK is one jailbreak away from draining a user's wallet." Add traction if any (GitHub stars, devs reached).</div>
+  </div>
+  <div class="card">
+    <div class="title">Presentation (10%)</div>
+    <div class="value" style="color:var(--orange)">Pending</div>
+    <div class="sub">Demo video not yet recorded. This is the gap to close today.</div>
+  </div>
+  <div class="card">
+    <div class="title">Overall estimate</div>
+    <div class="value" style="color:var(--green)">Top 10%</div>
+    <div class="sub">With a recorded demo. Without it: top 25%.</div>
+  </div>
+</div>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<h2>12 · Today's Action List</h2>
+
+<ul class="checklist">
+  <li class="todo"><span class="icon">1.</span> Record 3-min demo video using the script in Section 05 — <strong>highest impact action</strong></li>
+  <li class="todo"><span class="icon">2.</span> Deploy race-server to Railway/Fly/Render (Section 09 has the 3 fastest options)</li>
+  <li class="todo"><span class="icon">3.</span> Deploy race-ui HTML to GitHub Pages or Netlify (update localhost:3001 → deployed URL)</li>
+  <li class="todo"><span class="icon">4.</span> Add README Quick Start block (Section 10 — copy-paste ready)</li>
+  <li class="todo"><span class="icon">5.</span> Fill in teammate names and GitHub/Twitter links (Section 08)</li>
+  <li class="todo"><span class="icon">6.</span> Copy project description (Section 03) into submission form</li>
+  <li class="todo"><span class="icon">7.</span> Submit — AI/Agents track (or Infrastructure if no AI/Agents track exists)</li>
+</ul>
+
+
+<!-- ───────────────────────────────────────────────────────── -->
+<script>
+function copy(btn) {
+  const box = btn.closest('.copybox');
+  const text = Array.from(box.querySelectorAll('p'))
+    .map(p => p.innerText)
+    .join('\n\n');
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied!';
+    btn.style.background = 'var(--purple)';
+    btn.style.color = '#fff';
+    setTimeout(() => { btn.textContent = 'Copy'; btn.style.background = ''; btn.style.color = ''; }, 1800);
+  });
+}
+</script>
+
+</body>
+</html>

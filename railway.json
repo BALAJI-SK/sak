@@ -1,0 +1,12 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "nixpacks",
+    "buildCommand": "cargo build -p race-server --release"
+  },
+  "deploy": {
+    "startCommand": "./target/release/race-server",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
