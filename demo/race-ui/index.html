@@ -118,7 +118,26 @@ button:focus-visible, a:focus-visible { outline:2px solid var(--sak-green);outli
 .fb-correct:hover { background:rgba(0,255,136,0.15) !important; }
 #stopDemoBtn:hover { background:rgba(255,51,102,0.15) !important; }
 #landingSiteLink:hover { border-color:var(--sak-border-2) !important;color:var(--fg) !important; }
-#connectWalletBtn:hover { border-color:var(--sak-border) !important;background:var(--surface) !important; }
+/* Connect Phantom — prominent purple CTA when disconnected, calm green pill once connected. */
+#connectWalletBtn.is-disconnected {
+  border-color: var(--sak-purple);
+  background: linear-gradient(180deg, rgba(124,58,237,0.95) 0%, rgba(124,58,237,0.85) 100%);
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.25), 0 6px 16px -8px rgba(124,58,237,0.6);
+}
+#connectWalletBtn.is-disconnected:hover {
+  background: linear-gradient(180deg, #8b4cf0 0%, #7c3aed 100%);
+  box-shadow: 0 0 0 1px rgba(124,58,237,0.45), 0 8px 22px -8px rgba(124,58,237,0.8);
+  transform: translateY(-1px);
+}
+#connectWalletBtn.is-disconnected:active { transform: translateY(0); }
+#connectWalletBtn.is-connected {
+  border-color: var(--sak-green-border);
+  background: var(--sak-green-soft);
+  color: var(--sak-green);
+  box-shadow: none;
+}
+#connectWalletBtn.is-connected:hover { background: rgba(0,255,136,0.14); }
 @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important; } }
 </style>
 </head>
@@ -247,7 +266,7 @@ button:focus-visible, a:focus-visible { outline:2px solid var(--sak-green);outli
         </div>
         <div id="agentError" style="font-size:12px;color:var(--sak-red);margin-top:4px;display:none"></div>
         <div id="walletRow" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-          <button id="connectWalletBtn" style="width:100%;height:32px;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:0.03em;font-family:var(--font-sans);cursor:pointer;border:1px solid var(--sak-border-2);background:var(--surface-2);color:var(--fg-2);transition:border-color 150ms var(--ease-out),color 150ms var(--ease-out),background 150ms var(--ease-out);display:flex;align-items:center;justify-content:center;gap:6px">
+          <button id="connectWalletBtn" class="is-disconnected" style="width:100%;height:36px;border-radius:8px;font-size:12px;font-weight:700;letter-spacing:0.03em;font-family:var(--font-sans);cursor:pointer;border:1px solid;transition:all 0.18s var(--ease-out);display:flex;align-items:center;justify-content:center;gap:8px">
             <i data-lucide="wallet" style="width:14px;height:14px;stroke-width:1.5"></i>
             <span id="walletLabel">Connect Phantom</span>
           </button>
@@ -557,8 +576,8 @@ async function stopDemoAndReturnToGate() {
   const wi = document.getElementById('walletInfo');
   if (wl) wl.textContent = 'Connect Phantom';
   if (wbtn) {
-    wbtn.style.borderColor = '';
-    wbtn.style.color = '';
+    wbtn.classList.remove('is-connected');
+    wbtn.classList.add('is-disconnected');
   }
   if (wi) {
     wi.style.display = 'none';
@@ -1453,8 +1472,9 @@ document.getElementById('connectWalletBtn').addEventListener('click', async () =
 
     const short = walletPubKey.slice(0,4) + '...' + walletPubKey.slice(-4);
     document.getElementById('walletLabel').textContent = short;
-    document.getElementById('connectWalletBtn').style.borderColor = 'var(--sak-green-border)';
-    document.getElementById('connectWalletBtn').style.color = 'var(--sak-green)';
+    const wbtn = document.getElementById('connectWalletBtn');
+    wbtn.classList.remove('is-disconnected');
+    wbtn.classList.add('is-connected');
 
     // Show address immediately, then fetch balance
     const infoEl = document.getElementById('walletInfo');
