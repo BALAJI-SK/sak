@@ -1,12 +1,18 @@
 use anyhow::Result;
+use futures::StreamExt;
+use std::collections::HashMap;
 use tokio::sync::broadcast;
-use tracing::{info, warn, error};
-use rand::Rng;
+use tracing::{error, info, warn};
+use yellowstone_grpc_client::{ClientTlsConfig, GeyserGrpcClient};
+use yellowstone_grpc_proto::prelude::{
+    CommitmentLevel, SubscribeRequest, SubscribeRequestFilterSlots,
+    subscribe_update::UpdateOneof,
+};
 
-use sak_core::{ChainEvent, EventKind};
+use sak_core::ChainEvent;
 
-/// Subscribes to Yellowstone Geyser gRPC stream.
-/// Reconnects automatically with exponential backoff.
+/// Subscribes to Yellowstone Geyser gRPC stream via broadcast channel.
+/// Reconnects automatically with 500ms backoff.
 pub struct GeyserSubscriber {
     endpoint: String,
     x_token: Option<String>,
@@ -26,50 +32,63 @@ impl GeyserSubscriber {
         }
     }
 
-    /// Start the subscriber with reconnect loop.
     pub async fn run(self, _filter: super::SubscribeFilter) -> Result<()> {
-        let mut backoff_ms = 100u64;
-        let mut rng = rand::thread_rng();
-
         loop {
             info!("Connecting to Geyser at {}", self.endpoint);
 
             match self.connect_and_stream().await {
-                Ok(()) => {
-                    warn!("Geyser stream ended, reconnecting...");
-                }
-                Err(e) => {
-                    error!("Geyser error: {}, reconnecting in {}ms", e, backoff_ms);
-                }
+                Ok(()) => warn!("Geyser stream ended, reconnecting..."),
+                Err(e) => error!("Geyser error: {}, reconnecting in 500ms", e),
             }
 
-            // Exponential backoff with jitter — never fixed sleep
-            let jitter = rng.gen_range(0u64..50);
-            tokio::time::sleep(tokio::time::Duration::from_millis(backoff_ms + jitter)).await;
-            backoff_ms = (backoff_ms * 2).min(30_000); // cap at 30s
+            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
         }
     }
 
     async fn connect_and_stream(&self) -> Result<()> {
-        // Placeholder: In production, use yellowstone-grpc-client to connect
-        // For now, simulate receiving events for demo purposes
-        info!("Geyser connected (placeholder — implement Yellowstone gRPC)");
+        let mut builder = GeyserGrpcClient::build_from_shared(self.endpoint.clone())?
+            .tls_config(ClientTlsConfig::new().with_native_roots())?;
 
-        let mut rng = rand::thread_rng();
-
-        // Simulate receiving an event every 5 seconds
-        loop {
-            tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
-            let event = ChainEvent {
-                slot: rng.gen_range(1000u64..10000),
-                kind: EventKind::AccountChanged {
-                    pubkey: "11111111111111111111111111111111".into(),
-                    lamports: rng.gen_range(1000u64..1000000),
-                },
-            };
-
-            let _ = self.event_tx.send(event);
+        if let Some(token) = &self.x_token {
+            if !token.is_empty() {
+                builder = builder.x_token(Some(token.as_str()))?;
+            }
         }
+
+        let mut client = builder.connect().await?;
+
+        let request = SubscribeRequest {
+            slots: HashMap::from([(
+                "slots".to_string(),
+                SubscribeRequestFilterSlots {
+                    filter_by_commitment: Some(true),
+                    ..Default::default()
+                },
+            )]),
+            commitment: Some(CommitmentLevel::Processed as i32),
+            ..Default::default()
+        };
+
+        let mut stream = client.subscribe_once(request).await?;
+
+        info!("SAK Reflex Engine connected");
+
+        while let Some(msg) = stream.next().await {
+            match msg {
+                Ok(update) => {
+                    if let Some(UpdateOneof::Slot(slot)) = update.update_oneof {
+                        let event = ChainEvent::SlotUpdate {
+                            slot: slot.slot,
+                            parent: slot.parent,
+                            status: slot.status,
+                        };
+                        let _ = self.event_tx.send(event);
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        Ok(())
     }
 }

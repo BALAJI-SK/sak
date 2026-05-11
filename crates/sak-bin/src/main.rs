@@ -2,7 +2,8 @@
 //! Combines all pillars into one runnable daemon.
 
 use sak_sdk::Kernel;
-use sak_core::Decision;
+use sak_core::ChainEvent;
+use sak_reflex::ReflexConfig;
 use anyhow::Result;
 use tracing::{info, error};
 
@@ -39,7 +40,24 @@ async fn main() -> Result<()> {
     info!("SAK daemon started successfully");
     info!("Guardian loaded with rules from rules.yaml");
 
-    // Keep running (in production, would start Reflex Engine + API server)
+    // Spawn Reflex Engine — does not block the Guardian pipeline
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<ChainEvent>(256);
+    tokio::spawn(async move {
+        if let Err(e) = sak_reflex::start(ReflexConfig::devnet(), tx).await {
+            error!("Reflex Engine fatal error: {}", e);
+        }
+    });
+
+    // Log slot updates to stdout
+    tokio::spawn(async move {
+        while let Some(event) = rx.recv().await {
+            if let ChainEvent::SlotUpdate { slot, .. } = event {
+                info!("SLOT {} — Reflex Engine live", slot);
+            }
+        }
+    });
+
+    // Keep running
     tokio::time::sleep(tokio::time::Duration::from_secs(u64::MAX)).await;
 
     Ok(())

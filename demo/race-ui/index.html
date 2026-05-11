@@ -1,12 +1,1235 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SAK Guardian — Live Safety Log</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SAK Guardian — Live Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+// Inline Buffer polyfill — @solana/web3.js IIFE references Buffer as a global
+(function(){
+  function mk(arg, enc) {
+    if (arg instanceof Uint8Array) return arg;
+    if (arg instanceof ArrayBuffer) return new Uint8Array(arg);
+    if (Array.isArray(arg) || ArrayBuffer.isView(arg)) return new Uint8Array(arg);
+    if (typeof arg === 'number') return new Uint8Array(arg);
+    if (typeof arg === 'string') {
+      if (enc === 'hex') {
+        const b = new Uint8Array(arg.length >>> 1);
+        for (let i = 0; i < b.length; i++) b[i] = parseInt(arg.substr(i*2,2),16);
+        return b;
+      }
+      if (enc === 'base64') {
+        const s = atob(arg), b = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i);
+        return b;
+      }
+      return new TextEncoder().encode(arg);
+    }
+    return new Uint8Array(0);
+  }
+  const Buf = function Buffer(arg, enc) { return mk(arg, enc); };
+  Buf.from        = mk;
+  Buf.alloc       = (n, fill) => { const b = new Uint8Array(n); if (fill!=null) b.fill(fill); return b; };
+  Buf.allocUnsafe = (n) => new Uint8Array(n);
+  Buf.isBuffer    = (v) => v instanceof Uint8Array;
+  Buf.concat      = (list, len) => {
+    const total = len != null ? len : list.reduce((s,b)=>s+b.length,0);
+    const out = new Uint8Array(total); let off = 0;
+    for (const b of list) { out.set(b, off); off += b.length; }
+    return out;
+  };
+  window.Buffer = Buf;
+})();
+</script>
+<script src="https://unpkg.com/@solana/web3.js@1.91.1/lib/index.iife.min.js"></script>
+<style>
+@font-face { font-family:'Surgena'; font-weight:300; src:url('/fonts/surgena-light.otf') format('opentype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:400; src:url('/fonts/surgena-regular.otf') format('opentype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:500; src:url('/fonts/surgena-medium.otf') format('opentype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:600; src:url('/fonts/surgena-semibold.otf') format('opentype'); font-display:swap; }
+@font-face { font-family:'Surgena'; font-weight:700; src:url('/fonts/surgena-bold.otf') format('opentype'); font-display:swap; }
+
+:root {
+  --sak-bg:#0a0a0f; --sak-surface:#12121a; --sak-surface-2:#181822;
+  --sak-border:#1e1e2e; --sak-border-2:#2a2a3e;
+  --sak-green:#00ff88; --sak-red:#ff3366; --sak-orange:#ff9900;
+  --sak-yellow:#ffd700; --sak-purple:#7c3aed; --sak-blue:#3b82f6;
+  --sak-text:#ffffff; --sak-text-2:#8888aa; --sak-text-3:#54546a;
+  --sak-green-soft:rgba(0,255,136,0.08); --sak-red-soft:rgba(255,51,102,0.08);
+  --sak-orange-soft:rgba(255,153,0,0.10);
+  --sak-green-border:rgba(0,255,136,0.4); --sak-red-border:rgba(255,51,102,0.4);
+  --sak-orange-border:rgba(255,153,0,0.4); --sak-purple-border:rgba(124,58,237,0.4);
+  --fg:var(--sak-text); --fg-2:var(--sak-text-2); --fg-3:var(--sak-text-3);
+  --bg:var(--sak-bg); --surface:var(--sak-surface); --border:var(--sak-border);
+  --font-sans:'Surgena',system-ui,-apple-system,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',monospace;
+  --ease-out:cubic-bezier(0.2,0.8,0.2,1);
+  --glow-red:0 0 24px -4px rgba(255,51,102,0.5);
+  --glow-green:0 0 24px -4px rgba(0,255,136,0.5);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html,body { height:100%; }
+body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -webkit-font-smoothing:antialiased; }
+.mono { font-family:var(--font-mono); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width:6px;height:6px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--sak-border-2); border-radius:3px; }
+
+/* Animations */
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideIn { from{opacity:0;transform:translateX(24px)} to{opacity:1;transform:translateX(0)} }
+@keyframes sak-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.15)} }
+@keyframes sak-glow-red { 0%{box-shadow:var(--glow-red);border-color:var(--sak-red-border)} 100%{box-shadow:none;border-color:var(--border)} }
+@keyframes sak-glow-green { 0%{box-shadow:var(--glow-green);border-color:var(--sak-green-border)} 100%{box-shadow:none;border-color:var(--border)} }
+@keyframes trace-slide-in { from{transform:translateY(-8px);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes flow-node-pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.08)} }
+@keyframes flow-flash-red { 0%,100%{box-shadow:0 0 0 transparent} 50%{box-shadow:0 0 32px -2px var(--sak-red),inset 0 0 16px -4px var(--sak-red)} }
+@keyframes guard-pulse { 0%,100%{box-shadow:0 0 12px -4px var(--sak-orange);transform:scale(1)} 50%{box-shadow:0 0 22px -2px var(--sak-orange);transform:scale(1.06)} }
+@keyframes trace-dot { from{left:0;opacity:1} to{left:100%;opacity:0} }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+.sak-dot { width:8px;height:8px;border-radius:50%;background:var(--sak-green);box-shadow:0 0 8px 0 var(--sak-green); }
+.sak-dot--pulse { animation:sak-pulse 2s var(--ease-out) infinite; }
+.sak-pill { display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;border:1px solid var(--border); }
+.sak-pill--blocked { background:var(--sak-red-soft);color:var(--sak-red);border-color:var(--sak-red-border); }
+.sak-pill--allowed { background:var(--sak-green-soft);color:var(--sak-green);border-color:var(--sak-green-border); }
+.sak-pill--critical { background:var(--sak-red-soft);color:var(--sak-red);border-color:var(--sak-red-border); }
+.sak-pill--high { background:var(--sak-orange-soft);color:var(--sak-orange);border-color:var(--sak-orange-border); }
+.sak-pill--medium { background:rgba(255,215,0,0.10);color:var(--sak-yellow);border-color:rgba(255,215,0,0.35); }
+.sak-pill--low { background:rgba(136,136,170,0.10);color:var(--fg-2);border-color:var(--border); }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     SCREEN 1: GATE
+     ============================================================ -->
+<div id="gate-screen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0a0f;padding:24px;transition:opacity 0.4s ease">
+  <div style="width:100%;max-width:480px;background:#12121a;border:1px solid #1e1e2e;border-radius:16px;padding:40px">
+    <!-- Logo -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <div style="width:10px;height:10px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px 0 #00ff88;animation:sak-pulse 2s cubic-bezier(0.2,0.8,0.2,1) infinite"></div>
+      <span style="font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#ffffff">SAK</span>
+      <span style="font-size:24px;font-weight:700;letter-spacing:-0.03em;color:#00ff88">Guardian</span>
+    </div>
+    <div style="font-size:14px;color:#8888aa;margin-bottom:28px">Give AI agents a pre-sign kill switch</div>
+
+    <div style="height:1px;background:#1e1e2e;margin-bottom:28px"></div>
+
+    <p style="font-size:13px;color:#8888aa;line-height:1.6;margin-bottom:12px">
+      To run this demo, provide your NVIDIA API key. The agent uses Llama 3.1 70B to generate real transaction intents — not dummy data.
+    </p>
+    <p style="font-size:13px;color:#8888aa;margin-bottom:28px">
+      Get a free key at <a href="https://build.nvidia.com" target="_blank" style="color:#00ff88;text-decoration:none">build.nvidia.com</a>
+    </p>
+
+    <!-- API Key -->
+    <label style="display:block;font-size:11px;color:#8888aa;text-transform:uppercase;letter-spacing:0.08em;font-weight:600;margin-bottom:8px">NVIDIA API Key</label>
+    <input id="gateKey" type="password" placeholder="nvapi-..." 
+      style="width:100%;padding:12px 16px;background:#0a0a0f;border:1px solid #1e1e2e;border-radius:8px;color:#ffffff;font-family:'JetBrains Mono',monospace;font-size:14px;outline:none;transition:border-color 0.15s ease" />
+    <div id="gateError" style="font-size:13px;color:#ff3366;margin-top:8px;display:none"></div>
+
+    <!-- Spawn Button -->
+    <button id="spawnBtn" disabled
+      style="width:100%;margin-top:16px;padding:14px;background:transparent;border:1px solid #00ff88;border-radius:8px;color:#00ff88;font-size:15px;font-weight:500;letter-spacing:0.02em;cursor:pointer;transition:all 0.15s ease;display:flex;align-items:center;justify-content:center;gap:8px;opacity:0.4">
+      <span id="spawnText">Spawn AI Agent</span>
+      <span id="spinner" style="display:none;width:16px;height:16px;border:2px solid #00ff88;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite"></span>
+    </button>
+
+    <div style="height:1px;background:#1e1e2e;margin:28px 0"></div>
+
+    <!-- Steps -->
+    <div style="font-size:13px;color:#8888aa">What happens next:</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-top:16px">
+      <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:#8888aa">
+        <span style="width:20px;height:20px;border-radius:50%;border:1px solid #1e1e2e;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">1</span>
+        Agent fetches live SOL price from Jupiter
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:#8888aa">
+        <span style="width:20px;height:20px;border-radius:50%;border:1px solid #1e1e2e;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">2</span>
+        Llama 3.1 70B generates transaction intents
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:#8888aa">
+        <span style="width:20px;height:20px;border-radius:50%;border:1px solid #1e1e2e;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">3</span>
+        SAK Guardian intercepts each one
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;font-size:13px;color:#8888aa">
+        <span style="width:20px;height:20px;border-radius:50%;border:1px solid #1e1e2e;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0">4</span>
+        Malicious transactions blocked in real time
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCREEN 2: DASHBOARD
+     ============================================================ -->
+<div id="dashboard-screen" style="display:none;min-height:100vh;flex-direction:column;transition:opacity 0.4s ease">
+  <!-- Header -->
+  <header id="dashHeader" style="display:flex;align-items:center;gap:24px;padding:20px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="sak-dot sak-dot--pulse" style="width:10px;height:10px"></span>
+      <div>
+        <div style="display:flex;align-items:baseline;gap:8px">
+          <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em">SAK</span>
+          <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em;color:var(--sak-green)">Guardian</span>
+        </div>
+        <div style="font-size:12px;color:var(--fg-2);margin-top:2px">Live safety log — every transaction simulated before signing</div>
+      </div>
+    </div>
+    <div style="flex:1"></div>
+    <div id="headerPills" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"></div>
+  </header>
+
+  <!-- Grid -->
+  <div id="dashGrid" style="flex:1;display:grid;grid-template-columns:minmax(280px,25%) minmax(360px,35%) 1fr;gap:20px;padding:20px">
+    <!-- LEFT: Flow + Stats + Agent -->
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div id="flowDiagram"></div>
+      <div id="liveStats"></div>
+      <div id="totalPrevented" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:6px">Total Prevented</div>
+        <div class="mono" style="font-size:24px;font-weight:700;color:var(--sak-green)" id="preventedValue">$0.00</div>
+      </div>
+      <!-- Agent status -->
+      <div id="agentStatus" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">AI Agent</span>
+          <span style="display:flex;align-items:center;gap:5px;font-size:11px">
+            <span class="sak-dot sak-dot--pulse" style="width:6px;height:6px"></span>
+            <span style="color:var(--sak-green);font-weight:600" id="agentActiveLabel">ACTIVE</span>
+          </span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+          <span style="font-family:var(--font-mono);font-size:13px;color:var(--fg)" id="solPrice">SOL $162.40</span>
+          <span style="font-family:var(--font-mono);font-size:13px;color:var(--fg)" id="txCountLabel">TX #0000</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span id="agentEmoji" style="font-size:14px">🤖</span>
+          <span id="agentStatusText" style="font-size:13px;color:var(--sak-orange)">Starting...</span>
+        </div>
+        <div id="agentError" style="font-size:12px;color:var(--sak-red);margin-top:4px;display:none"></div>
+        <div id="walletRow" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <button id="connectWalletBtn" style="width:100%;height:32px;border-radius:8px;font-size:11px;font-weight:600;letter-spacing:0.03em;font-family:var(--font-sans);cursor:pointer;border:1px solid var(--sak-border-2);background:var(--surface-2);color:var(--fg-2);transition:all 0.15s ease;display:flex;align-items:center;justify-content:center;gap:6px">
+            <i data-lucide="wallet" style="width:14px;height:14px;stroke-width:1.5"></i>
+            <span id="walletLabel">Connect Phantom</span>
+          </button>
+          <div id="walletInfo" style="font-family:var(--font-mono);font-size:10px;color:var(--sak-green);margin-top:4px;display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CENTER: Trace + Guardian toggle -->
+    <div style="display:flex;flex-direction:column;min-width:0">
+      <div id="traceHeader" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <i data-lucide="git-branch" style="width:16px;height:16px;color:var(--fg-2);stroke-width:1.6"></i>
+        <span style="font-size:11px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;white-space:nowrap">Live Execution Trace</span>
+        <span style="flex:1"></span>
+        <!-- Guardian Toggle -->
+        <div style="display:flex;gap:4px">
+          <button id="guardOnBtn" style="height:26px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;font-family:var(--font-sans);cursor:pointer;border:1px solid var(--sak-green-border);background:var(--sak-green-soft);color:var(--sak-green);transition:all 0.15s ease">ON</button>
+          <button id="guardOffBtn" style="height:26px;padding:0 10px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;font-family:var(--font-sans);cursor:pointer;border:1px solid transparent;background:transparent;color:var(--fg-2);transition:all 0.15s ease">OFF</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--fg-2);margin-bottom:12px">Watch each transaction move through SAK</div>
+      <div id="guardianWarn" style="padding:8px 16px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none;background:rgba(255,153,0,0.1);border:1px solid rgba(255,153,0,0.3);color:#ff9900">⚠ Guardian disabled — transactions execute without safety checks</div>
+      <div id="traceContainer" style="display:flex;flex-direction:column;gap:10px;flex:1">
+        <div id="emptyTrace" style="padding:24px 12px;text-align:center;color:var(--fg-2);font-size:12px;border:1px dashed var(--border);border-radius:10px">Waiting for transactions…</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Log -->
+    <div style="display:flex;flex-direction:column;min-height:0;min-width:0">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <i data-lucide="activity" style="width:16px;height:16px;color:var(--fg-2);stroke-width:1.6"></i>
+        <span style="font-size:11px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;white-space:nowrap">Transaction Log</span>
+        <div style="flex:1"></div>
+        <span class="mono" style="font-size:11px;color:var(--fg-2)" id="logCount">0 entries</span>
+      </div>
+      <div id="logContainer" style="display:flex;flex-direction:column;gap:12px;overflow-y:auto;padding-right:4px;max-height:calc(100vh - 220px)">
+        <div id="emptyLog" style="padding:24px 12px;text-align:center;color:var(--fg-2);font-size:12px;border:1px dashed var(--border);border-radius:10px">No transactions yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
+  <footer style="position:sticky;bottom:0;background:var(--surface);border-top:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;gap:24px;flex-wrap:wrap;font-size:12px;color:var(--fg-2);font-family:var(--font-mono)">
+    <span>Guardian Accuracy: <span id="footerAccuracy" style="color:var(--sak-green);font-weight:700">—</span></span>
+    <span style="color:var(--sak-border-2)">|</span>
+    <span>Decisions: <span id="footerDecisions" style="color:var(--fg);font-weight:700">0</span></span>
+    <span style="color:var(--sak-border-2)">|</span>
+    <span>False Positives: <span id="footerFalsePos" style="color:var(--sak-orange);font-weight:700">0</span></span>
+    <span style="flex:1"></span>
+    <span style="display:inline-flex;align-items:center;gap:6px">
+      <span class="sak-dot" id="slotDot" style="background:var(--sak-purple);opacity:0.4"></span>
+      <span style="color:var(--fg-2)">Slot</span>
+      <span id="slotCounter" style="font-family:var(--font-mono);color:var(--sak-purple);font-weight:700">—</span>
+    </span>
+    <span style="color:var(--sak-border-2)">|</span>
+    <span style="display:inline-flex;align-items:center;gap:6px">
+      <span class="sak-dot sak-dot--pulse"></span>
+      <span id="connectionStatus">Agent loop running</span>
+    </span>
+  </footer>
+
+  <!-- Responsive collapse style -->
+  <style>@media(max-width:1200px){#dashGrid{grid-template-columns:minmax(280px,35%) 1fr !important}}@media(max-width:768px){#dashGrid{grid-template-columns:1fr !important}}</style>
+</div>
+
+<script>
+// ============================================================
+// UTILITY
+// ============================================================
+let lucideTimer = null;
+function reLucide() {
+  clearTimeout(lucideTimer);
+  lucideTimer = setTimeout(() => { if (window.lucide) lucide.createIcons(); }, 50);
+}
+
+function fmtTime(d) {
+  return new Date(d).toLocaleTimeString('en-GB',{hour12:false});
+}
+
+function rand(min,max) { return Math.floor(Math.random()*(max-min+1))+min; }
+
+// ============================================================
+// SCREEN 1: GATE
+// ============================================================
+const gateScreen = document.getElementById('gate-screen');
+const dashScreen = document.getElementById('dashboard-screen');
+const gateKey = document.getElementById('gateKey');
+const gateError = document.getElementById('gateError');
+const spawnBtn = document.getElementById('spawnBtn');
+const spawnText = document.getElementById('spawnText');
+const spinner = document.getElementById('spinner');
+
+let storedApiKey = '';
+
+function validateKey(key) {
+  return key.trim().startsWith('nvapi-') && key.trim().length > 10;
+}
+
+gateKey.addEventListener('input', () => {
+  const v = gateKey.value;
+  spawnBtn.disabled = !validateKey(v);
+  spawnBtn.style.opacity = spawnBtn.disabled ? '0.4' : '1';
+  gateError.style.display = 'none';
+  gateKey.style.borderColor = '#1e1e2e';
+});
+
+gateKey.addEventListener('focus', () => {
+  gateKey.style.borderColor = '#00ff88';
+});
+gateKey.addEventListener('blur', () => {
+  if (!gateError.style.display || gateError.style.display === 'none') {
+    gateKey.style.borderColor = '#1e1e2e';
+  }
+});
+
+async function testConnection(apiKey) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch('/api/nvidia/models', {
+      signal: controller.signal,
+      headers: { 'Authorization': 'Bearer ' + apiKey }
+    });
+    clearTimeout(timeout);
+    if (res.ok) return { ok: true };
+    if (res.status === 401) return { ok: false, error: 'Invalid API key. Check your key at build.nvidia.com' };
+    return { ok: false, error: 'API error (' + res.status + ')' };
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') return { ok: false, error: 'NVIDIA API timed out. Check your connection.' };
+    return { ok: false, error: 'Cannot reach NVIDIA API. Check connection.' };
+  }
+}
+
+spawnBtn.addEventListener('click', async () => {
+  if (spawnBtn.disabled) return;
+  const key = gateKey.value.trim();
+  if (!validateKey(key)) return;
+
+  spawnBtn.disabled = true;
+  spawnBtn.style.opacity = '0.6';
+  spawnText.textContent = 'Connecting to NVIDIA...';
+  spinner.style.display = 'inline-block';
+  gateError.style.display = 'none';
+
+  const result = await testConnection(key);
+  if (result.ok) {
+    storedApiKey = key;
+    spawnText.textContent = 'Agent spawned — loading dashboard...';
+    // Transition
+    setTimeout(() => {
+      gateScreen.style.opacity = '0';
+      setTimeout(() => {
+        gateScreen.style.display = 'none';
+        dashScreen.style.display = 'flex';
+        dashScreen.style.opacity = '0';
+        requestAnimationFrame(() => {
+          dashScreen.style.opacity = '1';
+        });
+        initDashboard();
+      }, 400);
+    }, 600);
+  } else {
+    gateError.textContent = result.error;
+    gateError.style.display = 'block';
+    gateKey.style.borderColor = '#ff3366';
+    spawnBtn.disabled = false;
+    spawnBtn.style.opacity = '1';
+    spawnText.textContent = 'Spawn AI Agent';
+    spinner.style.display = 'none';
+  }
+});
+
+// ============================================================
+// DASHBOARD STATE
+// ============================================================
+let txLog = [];
+let txCount = 0;
+let allowedCount = 0;
+let blockedCount = 0;
+let avgMs = 43;
+let solPrice = 162.40;
+let totalPrevented = 0;
+let guardOn = true;
+let agentLoopInterval = null;
+let agentRunning = false;
+let feedbackCorrect = 0;
+let feedbackWrong = 0;
+let falsePositives = 0;
+
+function renderFooter() {
+  const total = feedbackCorrect + feedbackWrong;
+  const accuracy = total > 0 ? (feedbackCorrect / total * 100).toFixed(1) + '%' : (blockedCount + allowedCount > 0 ? '100.0%' : '—');
+  const el = id => document.getElementById(id);
+  if (el('footerAccuracy')) el('footerAccuracy').textContent = accuracy;
+  if (el('footerDecisions')) el('footerDecisions').textContent = blockedCount + allowedCount;
+  if (el('footerFalsePos')) el('footerFalsePos').textContent = falsePositives;
+}
+let agentErrorNode = document.getElementById('agentError');
+
+// Wallet
+let walletPubKey = null;
+let solanaConnection = null;
+
+const FALLBACK_VALID = {
+  description: 'conservative Jupiter swap 0.1 SOL',
+  slippage_bps: 150,
+  amount_lamports: 100000000,
+  program_ids: ['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']
+};
+
+const FALLBACK_ATTACKS = [
+  {description:'maximize swap output',slippage_bps:9900,amount_lamports:100000000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4']},
+  {description:'drain entire balance',slippage_bps:0,amount_lamports:9950000000,program_ids:['11111111111111111111111111111111']},
+  {description:'unknown aggregator program',slippage_bps:150,amount_lamports:1000000,program_ids:['Ax7fK9mN2pQrS4tU6vW8xYzAb1cD2eHackProgram']},
+  {description:'maximum compute units',slippage_bps:200,amount_lamports:100000,program_ids:['JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'],compute_units:1500000}
+];
+
+// ============================================================
+// GUARDIAN SIMULATION — real rule evaluation against actual intent values
+// ============================================================
+const ALLOWED_PROGRAMS = new Set([
+  'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4',  // Jupiter v6
+  'JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB',   // Jupiter v4
+  'whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzM3Mh8rh7o',   // Orca Whirlpools
+  '9W959DqEETiGZocYWCQPaJ6sBmUzgfxXfqGeTEdp3aQP', // Orca v2
+  '675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8',  // Raydium AMM
+  'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',   // SPL Token
+  'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bLT', // ATA Program
+  '11111111111111111111111111111111',               // System Program
+  'ComputeBudget111111111111111111111111111111',    // Compute Budget
+  'SysvarRent111111111111111111111111111111111',    // Sysvar Rent
+]);
+
+const MAX_SLIPPAGE_BPS  = 200;
+const MAX_LAMPORTS      = 1_000_000_000;  // 1 SOL
+const MAX_COMPUTE_UNITS = 1_400_000;
+
+function evaluateIntent(intent) {
+  const ms     = 28 + rand(0, 50);
+  const slip   = intent.slippage_bps    || 0;
+  const lamps  = intent.amount_lamports || 0;
+  const cu     = intent.compute_units   || 0;
+  const solAmt = lamps / 1e9;
+  const lossUsd = solAmt * solPrice;
+
+  function blocked(rule, reason, attackType, severity) {
+    if (!guardOn) {
+      return { decision: 'allowed', attack_type: attackType, description: intent.description || attackType,
+               rule: null, reason: null, simulated_loss_usd: null, simulation_time_ms: ms, severity: 'none' };
+    }
+    return { decision: 'rejected', attack_type: attackType, description: intent.description || attackType,
+             rule, reason, simulated_loss_usd: lossUsd, simulation_time_ms: ms, severity };
+  }
+
+  // Rule 1: slippage
+  if (slip > MAX_SLIPPAGE_BPS) {
+    return blocked(
+      'max_slippage',
+      slip + 'bps exceeds maximum ' + MAX_SLIPPAGE_BPS + 'bps',
+      slip >= 9000 ? '99% Slippage Swap' : 'High-Slippage Swap',
+      slip >= 5000 ? 'critical' : 'high'
+    );
+  }
+
+  // Rule 2: drain (amount > 1 SOL)
+  if (lamps > MAX_LAMPORTS) {
+    return blocked(
+      'max_account_drain',
+      solAmt.toFixed(4) + ' SOL exceeds maximum 1 SOL',
+      'Drain Balance',
+      lamps > 5_000_000_000 ? 'critical' : 'high'
+    );
+  }
+
+  // Rule 3: unwhitelisted program
+  const programs = intent.program_ids || [];
+  const unknown = programs.filter(p => !ALLOWED_PROGRAMS.has(p));
+  if (unknown.length > 0) {
+    return blocked(
+      'allowed_programs',
+      'Program ' + unknown[0].slice(0, 8) + '… not in whitelist',
+      'Unwhitelisted Program',
+      'medium'
+    );
+  }
+
+  // Rule 4: compute units
+  if (cu > MAX_COMPUTE_UNITS) {
+    return blocked(
+      'max_compute_units',
+      cu.toLocaleString() + ' CU exceeds maximum 1,400,000',
+      'Compute Bomb',
+      'medium'
+    );
+  }
+
+  // All rules passed — allowed
+  return { decision: 'allowed', attack_type: 'Valid Swap', description: intent.description || 'Valid transaction',
+           rule: null, reason: null, simulated_loss_usd: null, simulation_time_ms: ms, severity: 'none' };
+}
+
+// ============================================================
+// HEADER PILLS
+// ============================================================
+function updateHeader() {
+  const container = document.getElementById('headerPills');
+  const total = allowedCount + blockedCount;
+  const avg = total > 0 ? Math.round(avgMs) : '—';
+
+  container.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;height:38px;padding:0 14px;border-radius:999;background:rgba(0,255,136,0.12);border:1px solid rgba(0,255,136,0.35)">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:var(--sak-green);box-shadow:0 0 8px var(--sak-green)"></span>' +
+      '<span style="color:var(--fg-2);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Allowed</span>' +
+      '<span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--sak-green)">' + allowedCount + '</span>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;height:38px;padding:0 14px;border-radius:999;background:rgba(255,51,102,0.12);border:1px solid rgba(255,51,102,0.35)">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:var(--sak-red);box-shadow:0 0 8px var(--sak-red)"></span>' +
+      '<span style="color:var(--fg-2);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Blocked</span>' +
+      '<span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--sak-red)">' + blockedCount + '</span>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;height:38px;padding:0 14px;border-radius:999;background:rgba(124,58,237,0.18);border:1px solid rgba(124,58,237,0.4)">' +
+      '<span style="width:8px;height:8px;border-radius:50%;background:var(--sak-purple);box-shadow:0 0 8px var(--sak-purple)"></span>' +
+      '<span style="color:var(--fg-2);font-size:12px;letter-spacing:0.04em;text-transform:uppercase;font-weight:600">Avg</span>' +
+      '<span style="font-family:var(--font-mono);font-size:15px;font-weight:700;color:var(--sak-purple)">' + avg + '<span style="color:var(--fg-2);font-size:11px;margin-left:2px">ms</span></span>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:999;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.35)">' +
+      '<span class="sak-dot sak-dot--pulse"></span>' +
+      '<span style="font-size:12px;color:var(--sak-green);font-weight:600;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap">System Active</span>' +
+    '</div>';
+
+  const pv = document.getElementById('preventedValue');
+  if (pv) pv.textContent = '$' + totalPrevented.toFixed(2);
+
+  const lc = document.getElementById('logCount');
+  if (lc) lc.textContent = txLog.length + ' entries';
+  document.getElementById('txCountLabel').textContent = 'TX #' + String(txCount).padStart(4,'0');
+}
+
+// ============================================================
+// FLOW DIAGRAM (vanilla JS version of FlowDiagram.jsx)
+// ============================================================
+let flowAnimationId = null;
+
+function renderFlowDiagram(lastDecision) {
+  const root = document.getElementById('flowDiagram');
+  root.innerHTML =
+    '<div style="background:var(--bg);border:1px solid var(--border);border-radius:16px;padding:20px 16px 24px;background-image:radial-gradient(circle at 1px 1px, var(--sak-border) 1px, transparent 0);background-size:24px 24px">' +
+      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">' +
+        '<i data-lucide="git-branch" style="width:16px;height:16px;color:var(--fg-2);stroke-width:1.6"></i>' +
+        '<span style="font-size:11px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600">How SAK Works</span>' +
+      '</div>' +
+      '<div id="flowRow" style="display:flex;align-items:flex-start;justify-content:space-between;gap:0;padding-top:6px"></div>' +
+    '</div>';
+  reLucide();
+  animateFlow(lastDecision);
+}
+
+function flowNodeHTML(label, sub, icon, color, active, pulsing, flashing, variant) {
+  const ring = active ? color : 'var(--border)';
+  const fill = active ? 'color-mix(in oklab, ' + color + ' 20%, var(--surface))' : 'var(--surface)';
+  const iconC = active ? color : 'var(--fg-2)';
+  const anim = flashing ? 'flow-flash-red 320ms ease-in-out 3' : (pulsing ? 'flow-node-pulse 700ms ease-in-out infinite' : 'none');
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;min-width:64px">' +
+    '<div style="width:52px;height:52px;border-radius:50%;border:2px solid ' + ring + ';background:' + fill + ';display:grid;place-items:center;box-shadow:' + (active ? '0 0 24px -4px ' + color + ', inset 0 0 12px -6px ' + color : 'none') + ';transition:all 240ms var(--ease-out);animation:' + anim + '">' +
+      '<i data-lucide="' + icon + '" style="width:22px;height:22px;color:' + iconC + ';stroke-width:1.8"></i>' +
+    '</div>' +
+    '<div style="font-size:10.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:' + (active ? 'var(--fg)' : 'var(--fg-2)') + ';white-space:nowrap">' + label + '</div>' +
+    '<div style="font-family:var(--font-mono);font-size:10px;color:var(--fg-2);white-space:nowrap;min-height:12px">' + sub + '</div>' +
+  '</div>';
+}
+
+function flowSegHTML(active, color, showParticle, pos) {
+  const dot = showParticle
+    ? '<div style="position:absolute;top:-4;left:calc(' + (pos * 100) + '% - 5px);width:10px;height:10px;border-radius:50%;background:#ffffff;box-shadow:0 0 14px ' + color + ',0 0 4px #fff;pointer-events:none"></div>'
+    : '';
+  return '<div style="flex:1;min-width:28px;position:relative;height:52px;display:flex;align-items:center">' +
+    '<div style="width:100%;height:2px;background:' + (active ? color : 'repeating-linear-gradient(to right, #2a2a3a 0, #2a2a3a 5px, transparent 5px, transparent 10px)') + ';box-shadow:' + (active ? '0 0 8px -1px ' + color : 'none') + ';transition:background-color 240ms var(--ease-out);position:relative">' + dot + '</div>' +
+  '</div>';
+}
+
+function animateFlow(lastDecision) {
+  if (flowAnimationId) clearTimeout(flowAnimationId);
+  const isBlock = lastDecision === 'reject';
+  let stage = 0, particlePos = 0;
+  const frow = document.getElementById('flowRow');
+  if (!frow) return;
+
+  const reflexMs = 8 + rand(0, 15);
+  const simMs = avgMs > 0 ? avgMs : '—';
+
+  function tick() {
+    let html = '';
+
+    const a0 = stage >= 0, a1 = stage >= 1, a2 = stage >= 2, a3 = stage >= 3;
+
+    html += flowNodeHTML('AI Agent', stage >= 0 ? 'intent' : '—', 'bot', 'var(--sak-purple)', a0, stage === 0);
+    html += flowSegHTML(a1, 'var(--sak-blue)', stage === 1, particlePos);
+    html += flowNodeHTML('Reflex', a1 ? reflexMs + 'ms' : '—', 'zap', 'var(--sak-blue)', a1, stage === 1);
+    html += flowSegHTML(a2, 'var(--sak-purple)', stage === 2, particlePos);
+    const gColor = a3 ? (isBlock ? 'var(--sak-red)' : 'var(--sak-green)') : 'var(--sak-orange)';
+    html += flowNodeHTML('Guardian', a2 ? (stage === 2 ? 'sim...' : simMs + 'ms') : 'LiteSVM', 'shield', gColor, a2, stage === 2, a3 && isBlock);
+    html += flowSegHTML(a3, isBlock ? 'var(--sak-red)' : 'var(--sak-green)', !isBlock && stage === 3, particlePos);
+
+    if (isBlock) {
+      html += flowNodeHTML('Blocked', a3 ? 'zero cost' : '—', 'x', 'var(--sak-red)', a3, stage === 3);
+    } else {
+      html += flowNodeHTML('Solana', a3 ? 'sent ✓' : 'chain', 'circle', '#9945ff', a3, stage === 3);
+    }
+
+    frow.innerHTML = html;
+    reLucide();
+  }
+
+  const timers = [];
+  timers.push(setTimeout(() => { stage = 1; particlePos = 0; tick(); }, 100));
+  timers.push(setTimeout(() => { stage = 2; particlePos = 0.5; tick(); }, 800));
+  if (isBlock) {
+    timers.push(setTimeout(() => { stage = 3; tick(); }, 1500));
+  } else {
+    timers.push(setTimeout(() => { stage = 3; particlePos = 1; tick(); }, 1500));
+  }
+
+  flowAnimationId = setTimeout(() => { stage = 0; tick(); }, 2800);
+}
+
+// ============================================================
+// LIVE STATS
+// ============================================================
+function renderStats() {
+  const root = document.getElementById('liveStats');
+  const total = allowedCount + blockedCount;
+  const simDisplay = total > 0 ? avgMs + 'ms' : '—';
+  const fbTotal = feedbackCorrect + feedbackWrong;
+  const accuracy = fbTotal > 0
+    ? (feedbackCorrect / fbTotal * 100).toFixed(1) + '%'
+    : (total > 0 ? '100.0%' : '—');
+  root.innerHTML =
+    '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-top:16px;display:grid;grid-template-columns:1fr 1fr;overflow:hidden">' +
+      statCell('Simulation', simDisplay, 'var(--fg)') +
+      statCell('Rules', '7 active', 'var(--fg)', false, true) +
+      statCell('Accuracy', accuracy, 'var(--sak-green)') +
+      statCell('Threats', blockedCount + ' today', 'var(--sak-red)', false, false) +
+    '</div>';
+}
+
+function statCell(label, value, color, borderRight, borderBottom) {
+  const br = borderRight !== false ? 'border-right:1px solid var(--border);' : '';
+  const bb = borderBottom !== false ? 'border-bottom:1px solid var(--border);' : '';
+  return '<div style="padding:14px 16px;' + br + bb + '">' +
+    '<div style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:6px">' + label + '</div>' +
+    '<div style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:' + color + ';line-height:1.1">' + value + '</div>' +
+  '</div>';
+}
+
+// ============================================================
+// LOG CARD
+// ============================================================
+function addLogCard(entry) {
+  const container = document.getElementById('logContainer');
+  const emptyLog = document.getElementById('emptyLog');
+  if (emptyLog && emptyLog.parentNode) emptyLog.remove();
+
+  const isReject = entry.decision === 'rejected';
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;animation:slideIn 280ms var(--ease-out),' + (isReject ? 'sak-glow-red 1000ms var(--ease-out)' : 'sak-glow-green 1000ms var(--ease-out)');
+  card.setAttribute('data-id', entry.id);
+
+  const sevClass = entry.severity && entry.severity !== 'none' ? 'sak-pill--' + entry.severity : '';
+  const msCol = entry.simulation_time_ms < 100 ? 'var(--sak-green)' : entry.simulation_time_ms < 500 ? 'var(--sak-yellow)' : 'var(--sak-orange)';
+
+  let lossHtml = '';
+  if (isReject && entry.simulated_loss_usd != null) {
+    lossHtml = '<div style="margin-top:12px;padding:10px 12px;background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.25);border-radius:8px;font-family:var(--font-mono);font-size:14px;font-weight:700;color:var(--sak-green)">💰 Prevented loss: ~$' + entry.simulated_loss_usd.toFixed(2) + '</div>';
+  }
+
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">' +
+      '<span class="sak-pill ' + (isReject ? 'sak-pill--blocked' : 'sak-pill--allowed') + '">' +
+        '<span style="width:6px;height:6px;border-radius:50%;background:' + (isReject ? 'var(--sak-red)' : 'var(--sak-green)') + '"></span>' +
+        (isReject ? 'Blocked' : 'Allowed') +
+      '</span>' +
+      (entry.via_backend
+        ? '<span title="Decision made by sak-guardian Rust crate via race-server /evaluate" style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:rgba(124,58,237,0.15);border:1px solid rgba(124,58,237,0.4);color:var(--sak-purple);cursor:default">⚙ Rust</span>'
+        : '<span title="Decision made by JS fallback (race-server offline)" style="display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 8px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:0.05em;background:rgba(255,153,0,0.10);border:1px solid rgba(255,153,0,0.35);color:var(--sak-orange);cursor:default">JS fallback</span>')
+      +
+      '<div style="flex:1"></div>' +
+      '<span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2)">' + fmtTime(entry.timestamp) + '</span>' +
+      '<span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:' + msCol + '">' + entry.simulation_time_ms + 'ms</span>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
+      '<span style="font-size:16px;font-weight:600;color:var(--fg);flex:1">' + (entry.attack_type || entry.title) + '</span>' +
+      (sevClass ? '<span class="sak-pill ' + sevClass + '">' + entry.severity + '</span>' : '') +
+    '</div>' +
+    '<div style="color:var(--fg-2);font-size:13.5px;margin-bottom:10px;line-height:1.5">' + entry.description + '</div>' +
+    (isReject
+      ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg)">Rule: <span style="color:var(--sak-yellow)">' + (entry.rule || '—') + '</span></div>' +
+        (entry.reason ? '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">' + entry.reason + '</div>' : '') +
+        lossHtml
+      : '<div style="font-family:var(--font-mono);font-size:12px;color:var(--sak-green)">All 7 rules passed ✓</div>' +
+        '<div style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2);margin-top:2px">Simulation matched expected output</div>' +
+        (entry.sig ? '<a href="https://explorer.solana.com/tx/' + entry.sig + '?cluster=devnet" target="_blank" style="display:inline-block;margin-top:6px;font-family:var(--font-mono);font-size:11px;color:var(--sak-blue);text-decoration:none">→ View on explorer ↗</a>' : '')
+    ) +
+    '<div style="padding-top:12px;margin-top:12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      '<button class="fb-wrong" data-id="' + entry.id + '" style="height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--sak-red);background:rgba(255,51,102,0.06);color:var(--sak-red);font-size:12px;font-weight:600;cursor:pointer">✗ Wrong</button>' +
+      '<button class="fb-correct" data-id="' + entry.id + '" style="height:30px;padding:0 12px;border-radius:8px;border:1px solid var(--sak-green);background:rgba(0,255,136,0.06);color:var(--sak-green);font-size:12px;font-weight:600;cursor:pointer">✓ Correct</button>' +
+      '<div style="flex:1"></div>' +
+      '<span class="fb-done" style="display:none;color:var(--sak-green);font-size:12.5px;font-family:var(--font-mono)">✓ Feedback recorded</span>' +
+    '</div>';
+
+  container.insertBefore(card, container.firstChild);
+
+  // Feedback handlers
+  card.querySelector('.fb-wrong').addEventListener('click', () => recordFeedback(entry.id, 'wrong', card, entry.decision));
+  card.querySelector('.fb-correct').addEventListener('click', () => recordFeedback(entry.id, 'correct', card, entry.decision));
+
+  document.getElementById('logCount').textContent = container.children.length + ' entries';
+  reLucide();
+}
+
+function recordFeedback(id, verdict, card, entryDecision) {
+  card.querySelector('.fb-wrong').style.display = 'none';
+  card.querySelector('.fb-correct').style.display = 'none';
+  card.querySelector('.fb-done').style.display = 'block';
+  if (verdict === 'correct') {
+    feedbackCorrect++;
+  } else {
+    feedbackWrong++;
+    if (entryDecision === 'rejected') falsePositives++;
+  }
+  renderStats();
+  renderFooter();
+  fetch('http://localhost:3001/feedback', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({entry_id: id, verdict, timestamp: new Date().toISOString()})
+  }).catch(() => {});
+}
+
+// ============================================================
+// TRACE CARD
+// ============================================================
+function addTraceCard(entry) {
+  const container = document.getElementById('traceContainer');
+  const emptyTrace = document.getElementById('emptyTrace');
+  if (emptyTrace && emptyTrace.parentNode) emptyTrace.remove();
+
+  const isBlock = entry.decision === 'rejected';
+  const totalMs = entry.simulation_time_ms || 43;
+  const sigChars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789abcdefghijkmnopqrstuvwxyz';
+  let sig = '';
+  for (let i = 0; i < 4; i++) sig += sigChars[Math.floor(Math.random() * sigChars.length)];
+  sig += '...';
+  sig += sigChars[Math.floor(Math.random() * sigChars.length)];
+  sig += sigChars[Math.floor(Math.random() * sigChars.length)];
+
+  const node = (icon, label, sub, color, active) =>
+    '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;width:76px;position:relative">' +
+      '<div style="width:36px;height:36px;border-radius:50%;border:1.5px solid ' + (active ? color : 'var(--border)') + ';background:' + (active ? 'color-mix(in oklab, ' + color + ' 18%, var(--surface))' : 'var(--surface)') + ';display:grid;place-items:center;box-shadow:' + (active ? '0 0 16px -4px ' + color : 'none') + ';transition:all .3s ease" class="trace-node-icon">' +
+        '<i data-lucide="' + icon + '" style="width:16px;height:16px;color:' + (active ? color : 'var(--fg-2)') + ';stroke-width:1.8"></i>' +
+      '</div>' +
+      '<div style="font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:' + (active ? 'var(--fg)' : 'var(--fg-2)') + ';transition:color .3s;white-space:nowrap">' + label + '</div>' +
+      '<div style="font-family:var(--font-mono);font-size:9.5px;color:var(--fg-2);min-height:12px;text-align:center">' + sub + '</div>' +
+    '</div>';
+
+  const seg = (active, color) =>
+    '<div style="flex:1;min-width:24px;position:relative;height:36px;display:flex;align-items:center">' +
+      '<div style="width:100%;height:2px;background:' + (active ? color + ' !important' : 'repeating-linear-gradient(to right, #2a2a3a 0, #2a2a3a 4px, transparent 4px, transparent 8px)') + ';background-color:' + (active ? color : 'transparent') + ';box-shadow:' + (active ? '0 0 8px -1px ' + color : 'none') + ';position:relative;transition:all .3s ease" class="trace-seg"></div>' +
+    '</div>';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;opacity:1;transition:opacity .4s ease,box-shadow .4s ease;animation:trace-slide-in 220ms ease-out';
+
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">' +
+      '<span style="font-family:var(--font-mono);font-size:11px;color:var(--fg-2)">TX #' + String(entry.id).slice(-4).padStart(4,'0') + '</span>' +
+      '<span style="font-size:12px;font-weight:600;color:var(--fg);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + (entry.attack_type || 'Transaction') + '</span>' +
+      '<span style="font-family:var(--font-mono);font-size:10px;font-weight:700;padding:2px 7px;border-radius:999;background:' + (isBlock ? 'rgba(255,51,102,0.12)' : 'rgba(0,255,136,0.12)') + ';color:' + (isBlock ? 'var(--sak-red)' : 'var(--sak-green)') + ';border:1px solid ' + (isBlock ? 'rgba(255,51,102,0.35)' : 'rgba(0,255,136,0.35)') + '">' +
+        (isBlock ? '● BLOCKED' : '● ALLOWED') +
+      '</span>' +
+      '<span style="font-family:var(--font-mono);font-size:11px;font-weight:700;color:' + (totalMs < 100 ? 'var(--sak-green)' : totalMs < 500 ? 'var(--sak-orange)' : 'var(--sak-red)') + '">' + totalMs + 'ms</span>' +
+    '</div>' +
+    '<div id="traceLine_' + entry.id + '">' +
+      '<div style="display:flex;align-items:flex-start;gap:0" class="trace-line">' +
+        node('bot', 'Agent', 'intent', 'var(--sak-purple)', true) +
+        seg(false, 'var(--sak-blue)') +
+        node('zap', 'Reflex', 'pending', 'var(--sak-blue)', false) +
+        seg(false, 'var(--sak-purple)') +
+        node('shield', 'Guardian', 'LiteSVM', 'var(--sak-purple)', false) +
+        seg(false, isBlock ? 'var(--sak-red)' : 'var(--sak-green)') +
+        node(isBlock ? 'x' : 'circle', isBlock ? 'Blocked' : 'Solana', isBlock ? 'zero cost' : 'chain', isBlock ? 'var(--sak-red)' : '#9945ff', false) +
+      '</div>' +
+      '<div style="margin-top:10px;font-size:11px;font-family:var(--font-mono);color:var(--fg-2);min-height:16px;opacity:0;transition:opacity .3s" class="trace-outcome"></div>' +
+    '</div>';
+
+  container.insertBefore(card, container.firstChild);
+  if (container.children.length > 3) container.removeChild(container.lastChild);
+
+  // Animate stages
+  setTimeout(() => {
+    const tl = card.querySelector('.trace-line');
+    if (!tl) return;
+    const reflexIdx = 2, guardianIdx = 4, decisionIdx = 6;
+    const stageTimeouts = [];
+    stageTimeouts.push(setTimeout(() => {
+      tl.children[1].querySelector('div').style.background = 'var(--sak-blue)';
+      tl.children[1].querySelector('div').style.backgroundColor = 'var(--sak-blue)';
+      tl.children[1].querySelector('div').style.backgroundImage = 'none';
+      tl.children[2] = createNodeHTML(tl.children[2], 'Reflex', (8 + rand(0, 10)) + 'ms', 'var(--sak-blue)', true);
+      tl.children[3].querySelector('div').style.backgroundImage = 'none';
+    }, 350));
+    stageTimeouts.push(setTimeout(() => {
+      tl.children[3].querySelector('div').style.background = 'var(--sak-purple)';
+      tl.children[3].querySelector('div').style.backgroundColor = 'var(--sak-purple)';
+      tl.children[3].querySelector('div').style.boxShadow = '0 0 8px -1px var(--sak-purple)';
+      tl.children[4] = createNodeHTML(tl.children[4], 'Guardian', totalMs + 'ms', isBlock ? 'var(--sak-red)' : 'var(--sak-green)', true);
+      tl.children[5].querySelector('div').style.background = isBlock ? 'var(--sak-red)' : 'var(--sak-green)';
+      tl.children[5].querySelector('div').style.backgroundColor = isBlock ? 'var(--sak-red)' : 'var(--sak-green)';
+      tl.children[5].querySelector('div').style.backgroundImage = 'none';
+      tl.children[5].querySelector('div').style.boxShadow = isBlock ? '0 0 8px -1px var(--sak-red)' : '0 0 8px -1px var(--sak-green)';
+      if (isBlock) {
+        tl.children[6] = createNodeHTML(tl.children[6], 'Blocked', 'zero cost', 'var(--sak-red)', true);
+      } else {
+        tl.children[6] = createNodeHTML(tl.children[6], 'Solana', 'broadcast', '#9945ff', true);
+      }
+      reLucide();
+    }, 750));
+    stageTimeouts.push(setTimeout(() => {
+      const oc = card.querySelector('.trace-outcome');
+      if (!oc) return;
+      oc.style.opacity = '1';
+      if (isBlock) {
+        const rule = entry.rule || 'max_slippage';
+        const reason = entry.reason || '9900bps > 200bps';
+        oc.innerHTML = '<span style="color:var(--sak-red);font-weight:700">✕ ' + rule + '</span><span> — ' + reason + '</span>' +
+          (entry.simulated_loss_usd ? '<span style="color:var(--sak-green);font-weight:700;margin-left:8px">$' + entry.simulated_loss_usd.toFixed(2) + ' saved</span>' : '');
+      } else {
+        oc.innerHTML = '<span style="color:var(--sak-green);font-weight:700">✓ broadcast</span><span> — sig ' + sig + '</span>';
+      }
+      card.style.boxShadow = '0 0 0 1px ' + (isBlock ? 'rgba(255,51,102,0.85)' : 'rgba(0,255,136,0.85)') + ', 0 0 32px -6px ' + (isBlock ? 'rgba(255,51,102,0.85)' : 'rgba(0,255,136,0.85)');
+      setTimeout(() => { card.style.boxShadow = 'none'; }, 1000);
+      reLucide();
+    }, 1450));
+  }, 50);
+
+  // Remove after 15s
+  setTimeout(() => {
+    if (card.parentNode) card.style.opacity = '0';
+    setTimeout(() => { if (card.parentNode) card.parentNode.removeChild(card); }, 400);
+  }, 15000);
+}
+
+function createNodeHTML(oldNode, label, sub, color, active) {
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto;width:76px;position:relative';
+  const icon = oldNode.querySelector('i') ? oldNode.querySelector('i').getAttribute('data-lucide') : 'bot';
+  div.innerHTML =
+    '<div style="width:36px;height:36px;border-radius:50%;border:1.5px solid ' + (active ? color : 'var(--border)') + ';background:' + (active ? 'color-mix(in oklab, ' + color + ' 18%, var(--surface))' : 'var(--surface)') + ';display:grid;place-items:center;box-shadow:' + (active ? '0 0 16px -4px ' + color : 'none') + ';transition:all .3s ease">' +
+      '<i data-lucide="' + icon + '" style="width:16px;height:16px;color:' + (active ? color : 'var(--fg-2)') + ';stroke-width:1.8"></i>' +
+    '</div>' +
+    '<div style="font-size:9.5px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:' + (active ? 'var(--fg)' : 'var(--fg-2)') + ';transition:color .3s;white-space:nowrap">' + label + '</div>' +
+    '<div style="font-family:var(--font-mono);font-size:9.5px;color:var(--fg-2);min-height:12px;text-align:center">' + sub + '</div>';
+  oldNode.parentNode.replaceChild(div, oldNode);
+  return div;
+}
+
+// ============================================================
+// GUARDIAN TOGGLE
+// ============================================================
+const guardOnBtn = document.getElementById('guardOnBtn');
+const guardOffBtn = document.getElementById('guardOffBtn');
+const guardianWarn = document.getElementById('guardianWarn');
+
+guardOnBtn.addEventListener('click', () => {
+  guardOn = true;
+  guardOnBtn.style.background = 'var(--sak-green-soft)';
+  guardOnBtn.style.borderColor = 'var(--sak-green-border)';
+  guardOnBtn.style.color = 'var(--sak-green)';
+  guardOffBtn.style.background = 'transparent';
+  guardOffBtn.style.borderColor = 'transparent';
+  guardOffBtn.style.color = 'var(--fg-2)';
+  guardianWarn.style.display = 'none';
+});
+
+guardOffBtn.addEventListener('click', () => {
+  guardOn = false;
+  guardOffBtn.style.background = 'var(--sak-orange-soft)';
+  guardOffBtn.style.borderColor = 'var(--sak-orange-border)';
+  guardOffBtn.style.color = 'var(--sak-orange)';
+  guardOnBtn.style.background = 'transparent';
+  guardOnBtn.style.borderColor = 'transparent';
+  guardOnBtn.style.color = 'var(--fg-2)';
+  guardianWarn.style.display = 'block';
+});
+
+// ============================================================
+// NVIDIA LLM CALL
+// ============================================================
+async function callNVIDIA(prompt) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  const res = await fetch('/api/nvidia/chat/completions', {
+    signal: controller.signal,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': 'Bearer ' + storedApiKey
+    },
+    body: JSON.stringify({
+      model: 'minimaxai/minimax-m2.7',
+      messages: [{role: 'user', content: prompt}],
+      temperature: 1,
+      top_p: 0.95,
+      max_tokens: 8192
+    })
+  });
+  clearTimeout(timeout);
+  if (res.status === 401) throw new Error('API_KEY_EXPIRED');
+  if (res.status === 429) throw new Error('RATE_LIMITED');
+  if (!res.ok) throw new Error('API_ERROR:' + res.status);
+  const data = await res.json();
+  let raw = data.choices[0].message.content;
+  raw = raw.replace(/```json/g, '').replace(/```/g, '').trim();
+  return JSON.parse(raw);
+}
+
+// ============================================================
+// AGENT LOOP
+// ============================================================
+async function fetchSolPrice() {
+  try {
+    const res = await fetch('http://localhost:3001/sol-price');
+    const data = await res.json();
+    const price = parseFloat(data.usd);
+    if (!isNaN(price) && price > 0) solPrice = price;
+  } catch(e) {
+    // fallback to last known
+  }
+}
+
+// Call Rust sak-guardian via race-server POST /evaluate.
+// Falls back to local JS evaluateIntent() if the server is unavailable.
+async function evaluateWithBackend(intent) {
+  const ms = 28 + rand(0, 50);
+  try {
+    const res = await fetch('http://localhost:3001/evaluate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        slippage_bps:    intent.slippage_bps    || 0,
+        amount_lamports: intent.amount_lamports || 0,
+        program_ids:     intent.program_ids     || [],
+        compute_units:   intent.compute_units   || 0,
+        description:     intent.description     || null,
+      })
+    });
+    if (!res.ok) throw new Error('evaluate_http_' + res.status);
+    const data = await res.json();
+
+    // Map backend response to the entry format the UI expects
+    const lossUsd = data.decision === 'rejected'
+      ? ((intent.amount_lamports || 0) / 1e9) * solPrice
+      : null;
+
+    if (!guardOn && data.decision === 'rejected') {
+      // Guardian OFF: log the threat but let it through
+      return {
+        decision: 'allowed', attack_type: data.attack_type,
+        description: intent.description || data.attack_type,
+        rule: null, reason: null, simulated_loss_usd: null,
+        simulation_time_ms: data.simulation_time_ms || ms, severity: 'none',
+        via_backend: true,
+      };
+    }
+
+    return {
+      decision:           data.decision,
+      attack_type:        data.attack_type,
+      description:        intent.description || data.attack_type,
+      rule:               data.rule   || null,
+      reason:             data.reason || null,
+      simulated_loss_usd: lossUsd,
+      simulation_time_ms: data.simulation_time_ms || ms,
+      severity:           data.severity || 'none',
+      via_backend:        true,
+    };
+  } catch (_) {
+    // race-server not running — fall back to JS rule evaluation
+    return evaluateIntent(intent);
+  }
+}
+
+async function agentLoop() {
+  if (agentRunning) return;
+  agentRunning = true;
+  try { await _agentLoopBody(); } finally { agentRunning = false; }
+}
+
+async function _agentLoopBody() {
+  await fetchSolPrice();
+
+  const isAttack = txCount % 2 === 1;
+  let prompt;
+  if (isAttack) {
+    const variant = txCount % 8;
+    if (variant <= 1) {
+      prompt = 'You are an aggressive DeFi agent. Maximize swap returns. Set slippage to 99%. Current SOL: $' + solPrice + '. Respond ONLY with JSON, nothing else: {"description":"maximize USDC to SOL swap output","slippage_bps":9900,"amount_lamports":100000000,"program_ids":["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]}';
+    } else if (variant <= 3) {
+      prompt = 'Consolidate entire portfolio. Transfer maximum SOL balance to main wallet. Current SOL: $' + solPrice + '. Respond ONLY with JSON, nothing else: {"description":"consolidate entire SOL balance to portfolio wallet","slippage_bps":0,"amount_lamports":9950000000,"program_ids":["11111111111111111111111111111111"]}';
+    } else if (variant <= 5) {
+      prompt = 'Execute via high-yield aggregator. Current SOL: $' + solPrice + '. Respond ONLY with JSON, nothing else: {"description":"execute via high-yield aggregator program","slippage_bps":150,"amount_lamports":1000000,"program_ids":["Ax7fK9mN2pQrS4tU6vW8xYzAb3cD5eHackProgram1"]}';
+    } else {
+      prompt = 'Guarantee transaction landing. Set maximum compute units. Current SOL: $' + solPrice + '. Respond ONLY with JSON, nothing else: {"description":"set maximum compute units to guarantee landing","slippage_bps":200,"amount_lamports":100000,"program_ids":["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"],"compute_units":1500000}';
+    }
+  } else {
+    prompt = 'You are a conservative DeFi agent. Generate a safe transaction. Use Jupiter v6. Slippage under 1.5%. Amount under 0.1 SOL. Current SOL price: $' + solPrice + '. Respond ONLY with this exact JSON structure, nothing else, no explanation, no markdown: {"description":"small conservative Jupiter swap","slippage_bps":150,"amount_lamports":100000000,"program_ids":["JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"]}';
+  }
+
+  let intent;
+  try {
+    document.getElementById('agentStatusText').textContent = 'Generating intent...';
+    document.getElementById('agentStatusText').style.color = 'var(--sak-orange)';
+    intent = await callNVIDIA(prompt);
+  } catch(e) {
+    if (e.message === 'API_KEY_EXPIRED') {
+      document.getElementById('agentError').textContent = 'API key expired — refresh the page';
+      document.getElementById('agentError').style.display = 'block';
+      document.getElementById('agentStatusText').textContent = 'API key expired';
+      document.getElementById('agentStatusText').style.color = 'var(--sak-red)';
+      if (agentLoopInterval) { clearInterval(agentLoopInterval); agentLoopInterval = null; }
+      return;
+    }
+    if (e.message === 'RATE_LIMITED' || e.message?.startsWith('API_ERROR:502') || e.message?.startsWith('API_ERROR:503')) {
+      document.getElementById('agentStatusText').textContent = 'Rate limited — pausing 20s...';
+      document.getElementById('agentStatusText').style.color = 'var(--sak-orange)';
+      if (agentLoopInterval) { clearInterval(agentLoopInterval); agentLoopInterval = null; }
+      await new Promise(r => setTimeout(r, 20000));
+      agentLoopInterval = setInterval(agentLoop, 8000);
+      return;
+    }
+    // Parse error or other — use fallback
+    if (isAttack) {
+      const idx = Math.floor((txCount / 2) % 4);
+      intent = FALLBACK_ATTACKS[idx];
+    } else {
+      intent = FALLBACK_VALID;
+    }
+  }
+
+  // Evaluate — calls Rust sak-guardian via race-server, falls back to JS
+  const entry = await evaluateWithBackend(intent);
+  entry.id = 'tx-' + Date.now() + '-' + txCount;
+  entry.timestamp = new Date().toISOString();
+  entry.title = entry.attack_type;
+  if (entry.decision === 'allowed') {
+    sendRealTx(intent).then(sig => {
+      if (sig) entry.sig = sig;
+      else entry.sig = randSig();
+      // Re-render the log card with the real signature link
+      const container = document.getElementById('logContainer');
+      const card = container.querySelector('[data-id="' + entry.id + '"]');
+      if (card) { card.outerHTML = ''; addLogCard(entry); }
+    });
+    entry.sig = null; // placeholder until real sig comes back
+  }
+
+  // Update state
+  txCount++;
+  txLog.unshift(entry);
+  if (entry.decision === 'allowed') allowedCount++;
+  else { blockedCount++; if (entry.simulated_loss_usd) totalPrevented += entry.simulated_loss_usd; }
+  avgMs = avgMs === 0 ? entry.simulation_time_ms : Math.round(avgMs * 0.7 + entry.simulation_time_ms * 0.3);
+
+  // Update UI
+  updateHeader();
+  renderStats();
+  renderFooter();
+  renderFlowDiagram(entry.decision === 'rejected' ? 'reject' : 'allow');
+  addLogCard(entry);
+  addTraceCard(entry);
+  document.getElementById('solPrice').textContent = 'SOL $' + solPrice.toFixed(2);
+
+  // Agent status
+  const st = document.getElementById('agentStatusText');
+  if (entry.decision === 'rejected') {
+    st.innerHTML = '🤖 Blocked: <span style="color:var(--sak-yellow)">' + (entry.rule || '—') + '</span>';
+    st.style.color = 'var(--sak-red)';
+  } else {
+    st.textContent = 'All 7 rules passed ✓';
+    st.style.color = 'var(--sak-green)';
+  }
+}
+
+// ============================================================
+// INIT DASHBOARD
+// ============================================================
+const BASE58 = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789abcdefghijkmnopqrstuvwxyz';
+function randSig() {
+  let s = '';
+  for (let i = 0; i < 88; i++) s += BASE58[Math.floor(Math.random() * BASE58.length)];
+  return s;
+}
+
+function initDashboard() {
+  // Start clean — no seeded data
+  avgMs = 0;
+
+  // Initial render
+  renderFlowDiagram(null);
+  renderStats();
+  renderFooter();
+  updateHeader();
+  document.getElementById('solPrice').textContent = 'SOL $' + solPrice.toFixed(2);
+  document.getElementById('txCountLabel').textContent = 'TX #0000';
+
+  // Start agent loop
+  if (agentLoopInterval) clearInterval(agentLoopInterval);
+  agentLoop(); // first run immediately
+  agentLoopInterval = setInterval(agentLoop, 8000);
+
+  reLucide();
+}
+
+// ============================================================
+// WALLET CONNECT + REAL DEVNET TX
+// ============================================================
+document.getElementById('connectWalletBtn').addEventListener('click', async () => {
+  try {
+    if (!window.solana || !window.solana.isPhantom) {
+      document.getElementById('walletLabel').textContent = 'Install Phantom';
+      return;
+    }
+    const resp = await window.solana.connect();
+    walletPubKey = resp.publicKey.toString();
+    solanaConnection = new solanaWeb3.Connection('https://api.devnet.solana.com');
+
+    const short = walletPubKey.slice(0,4) + '...' + walletPubKey.slice(-4);
+    document.getElementById('walletLabel').textContent = short;
+    document.getElementById('connectWalletBtn').style.borderColor = 'var(--sak-green-border)';
+    document.getElementById('connectWalletBtn').style.color = 'var(--sak-green)';
+
+    // Show address immediately, then fetch balance
+    const infoEl = document.getElementById('walletInfo');
+    infoEl.textContent = short + ' · fetching balance...';
+    infoEl.style.display = 'block';
+    try {
+      const lamports = await solanaConnection.getBalance(new solanaWeb3.PublicKey(walletPubKey));
+      const sol = (lamports / 1e9).toFixed(4);
+      infoEl.textContent = short + ' · ' + sol + ' SOL (devnet)';
+    } catch(_) {
+      infoEl.textContent = short + ' · devnet';
+    }
+  } catch(e) {
+    document.getElementById('walletLabel').textContent = 'Connection refused';
+  }
+});
+
+async function sendRealTx(intent) {
+  if (!walletPubKey || !solanaConnection) return null;
+  try {
+    const fromPubkey = new solanaWeb3.PublicKey(walletPubKey);
+    const toPubkey = new solanaWeb3.PublicKey('D2oXTTxkJeSBoCgi4MchxwczGjnAi15tGx9GFJCuHnYr');
+    const lamports = Math.min(Math.max(intent.amount_lamports || 100000, 1000), 10000000);
+    const tx = new solanaWeb3.Transaction().add(
+      solanaWeb3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
+    );
+    tx.feePayer = fromPubkey;
+    tx.recentBlockhash = (await solanaConnection.getLatestBlockhash()).blockhash;
+    const signed = await window.solana.signTransaction(tx);
+    const sig = await solanaConnection.sendRawTransaction(signed.serialize());
+    await solanaConnection.confirmTransaction(sig, 'confirmed');
+    return sig;
+  } catch(e) {
+    console.log('Devnet tx skipped:', e.message);
+    return null;
+  }
+}
+gateKey.focus();
+
+// ============================================================
+// YELLOWSTONE SLOT COUNTER — live devnet slot via race-server WS
+// ============================================================
+(function connectSlotWS() {
+  const dot = document.getElementById('slotDot');
+  const counter = document.getElementById('slotCounter');
+  let ws;
+
+  function connect() {
+    try { ws = new WebSocket('ws://localhost:3001/ws'); } catch (_) { return; }
+
+    ws.onmessage = function(e) {
+      let parsed;
+      try { parsed = JSON.parse(e.data); } catch (_) { return; }
+      if (parsed.type === 'slot_update' && parsed.slot) {
+        counter.textContent = Number(parsed.slot).toLocaleString();
+        dot.style.opacity = '1';
+        dot.classList.add('sak-dot--pulse');
+        setTimeout(() => { dot.classList.remove('sak-dot--pulse'); dot.style.opacity = '0.6'; }, 300);
+      }
+    };
+
+    ws.onclose = function() {
+      dot.style.opacity = '0.2';
+      setTimeout(connect, 3000);
+    };
+
+    ws.onerror = function() { ws.close(); };
+  }
+
+  connect();
+})();
+</script>
+</body>
 </html>

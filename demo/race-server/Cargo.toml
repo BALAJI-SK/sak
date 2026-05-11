@@ -12,6 +12,7 @@ serde_json = "1"
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 sak-guardian = { path = "../../crates/sak-guardian" }
+sak-reflex  = { path = "../../crates/sak-reflex" }
 sak-core = { path = "../../crates/sak-core" }
 litesvm = { workspace = true }
 solana-keypair = { workspace = true }
@@ -26,3 +27,6 @@ solana-sdk-ids = { workspace = true }
 solana-account = { workspace = true }
 rand = "0.8"
 chrono = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
+tower-http = { version = "0.5", features = ["cors"] }
+anyhow = { workspace = true }

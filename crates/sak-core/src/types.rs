@@ -1,16 +1,21 @@
 use serde::{Deserialize, Serialize};
 
-/// A slot-stamped on-chain event produced by the Reflex Engine.
+/// A typed on-chain event produced by the Reflex Engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChainEvent {
-    pub slot: u64,
-    pub kind: EventKind,
+pub enum ChainEvent {
+    AccountChanged { slot: u64, pubkey: String, lamports: u64 },
+    ProgramInvoked { slot: u64, program_id: String },
+    SlotUpdate { slot: u64, parent: Option<u64>, status: i32 },
+    ShredEntry { slot: u64, data: Vec<u8> },
 }
 
+/// Legacy slot-scoped event kind (kept for compatibility).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum EventKind {
     AccountChanged { pubkey: String, lamports: u64 },
     ProgramInvoked { program_id: String },
+    SlotUpdate { parent: Option<u64>, status: i32 },
+    ShredEntry { data: Vec<u8> },
 }
 
 /// The Guardian's verdict on a transaction.

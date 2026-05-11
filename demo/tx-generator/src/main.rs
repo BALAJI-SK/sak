@@ -1,4 +1,3 @@
-use rand::Rng;
 use sak_core::{Decision, TxMeta};
 use sak_guardian::Guardian;
 use solana_keypair::Keypair;
@@ -8,6 +7,7 @@ use solana_transaction::Transaction;
 use solana_signer::Signer;
 use solana_address::Address;
 use solana_instruction::{AccountMeta, Instruction};
+use std::io::{self, Write};
 use std::time::Instant;
 use chrono::Utc;
 
@@ -294,6 +294,11 @@ async fn main() {
             "simulation_time_ms": simulation_time_ms,
         });
 
-        println!("{}", log_entry.to_string());
+        let line = log_entry.to_string();
+        // Use write! + flush so a broken pipe (parent closed) exits cleanly instead of panicking.
+        let mut out = io::stdout();
+        if writeln!(out, "{}", line).is_err() || out.flush().is_err() {
+            break;
+        }
     }
 }

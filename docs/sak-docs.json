@@ -1,0 +1,738 @@
+{
+  "meta": {
+    "product": "SAK — Solana Agent Kernel",
+    "tagline": "The pre-sign kill switch for AI agents on Solana.",
+    "version": "0.1.0",
+    "status": "Colosseum Frontier 2026",
+    "github": "https://github.com/BALAJI-SK/sak",
+    "demo_ws": "ws://localhost:3001/ws",
+    "demo_ui": "http://localhost:3000",
+    "license": "Not yet assigned — see LICENSE file",
+    "last_updated": "May 2026"
+  },
+
+  "one_liner": "SAK gives AI agents a pre-sign kill switch, same-slot reflexes, and 100–1000× cheaper state — in one Rust kernel that plugs under any existing agent framework.",
+
+  "problem": {
+    "headline": "Nothing exists between the LLM and the signing step.",
+    "sub": "Every agent framework sends LLM output directly to signing. No check. No simulation. Nothing.",
+    "real_incident": {
+      "title": "The Grok Morse Code Attack",
+      "date": "2025",
+      "description": "An attacker sent a Morse code message to Grok. The AI decoded it and passed it to a trading bot. The bot executed it. $200,000 left the wallet in one transaction. No check caught it.",
+      "amount": "$200,000",
+      "source": "Documented public incident"
+    },
+    "stats": [
+      { "value": "$1.8B",  "label": "Lost to LLM-linked crypto incidents in 2025" },
+      { "value": "26",     "label": "Active malicious LLM routers found (April 2026)" },
+      { "value": "$500K",  "label": "Drained from one wallet in one transaction" },
+      { "value": "400ms",  "label": "Solana slot time — polling agents always miss it" }
+    ],
+    "failures": [
+      {
+        "name": "The Hallucination Risk",
+        "icon": "brain",
+        "description": "LLMs predict probable tokens. They do not verify on-chain state. A hallucinated token address, 99% slippage, or wrong program ID executes immediately.",
+        "examples": [
+          "Wrong token mint address",
+          "99% slippage draining wallet",
+          "Wrong CPI program layout",
+          "Incorrect decimal precision",
+          "Unknown program invocation"
+        ]
+      },
+      {
+        "name": "The Polling Tax",
+        "icon": "clock",
+        "description": "Agents poll RPC every 400ms. Solana produces a new slot every 400ms. Polling agents are always 2-3 slots behind every opportunity.",
+        "examples": [
+          "MEV windows close in under 400ms",
+          "Arbitrage opportunities vanish in one slot",
+          "Polling agents can never win on Solana"
+        ]
+      },
+      {
+        "name": "The Cost Bottleneck",
+        "icon": "coins",
+        "description": "Storing agent state in regular Solana accounts costs ~$0.30 per account. 1,000 agents cost $300,000 in rent before executing a single transaction.",
+        "examples": [
+          "1,000 agents = $300,000 in rent",
+          "Makes micro-agent swarms economically impossible",
+          "Scales linearly with SOL price"
+        ]
+      }
+    ]
+  },
+
+  "stack_position": {
+    "headline": "SAK sits underneath your existing stack.",
+    "layers": [
+      { "name": "LLM",              "sublabel": "GPT, Claude, Llama",     "color": "gray",  "note": "NOT our layer",  "highlight": false },
+      { "name": "elizaOS / Agent Kit", "sublabel": "Orchestration",        "color": "gray",  "note": "NOT our layer",  "highlight": false },
+      { "name": "SAK Kernel",       "sublabel": "Safety + Speed + State", "color": "green", "note": "WE ARE HERE",    "highlight": true  },
+      { "name": "Solana Network",   "sublabel": "Settlement",             "color": "gray",  "note": "NOT our layer",  "highlight": false }
+    ],
+    "data_flow": [
+      "Events flow UP: Geyser → Reflex Engine → Agent",
+      "Transactions flow DOWN: Agent → Guardian → RPC",
+      "Agent never touches RPC directly",
+      "Every outbound tx passes through Guardian"
+    ]
+  },
+
+  "pillars": [
+    {
+      "id": "guardian",
+      "number": 2,
+      "name": "Guardian",
+      "tagline": "Pre-sign Simulation Engine",
+      "icon": "shield",
+      "status": "production",
+      "crate": "sak-guardian",
+      "description": "Every transaction the LLM generates is simulated locally inside LiteSVM before signing. A 7-rule engine evaluates the simulation result. If any rule fails, the transaction is rejected with zero on-chain cost.",
+      "the_guarantee": "The attacker can hide the instruction however they want. They cannot hide what it does to the balance.",
+      "how_it_works": [
+        "LLM generates transaction (unsigned)",
+        "Guardian receives it before signing",
+        "LiteSVM runs the full Solana VM locally",
+        "Pre-state and post-state captured",
+        "7 rules evaluated in order — first rejection wins",
+        "Decision::Allow or Decision::Reject returned",
+        "Rejected: zero on-chain cost"
+      ],
+      "tech": ["LiteSVM 0.11", "Rust stable", "serde_yaml rule engine", "tokio"],
+      "metrics": {
+        "test_suite": "20/20 evil corpus tests passing",
+        "rules_active": 7,
+        "evaluation_time": "25–70ms",
+        "on_chain_cost_for_rejection": "$0.00"
+      }
+    },
+    {
+      "id": "reflex",
+      "number": 1,
+      "name": "Reflex Engine",
+      "tagline": "Same-Slot Threat Awareness",
+      "icon": "zap",
+      "status": "architecture_complete",
+      "crate": "sak-reflex",
+      "description": "Yellowstone Geyser gRPC push subscription instead of RPC polling. Receives account deltas within the same slot they occur. Reconnects automatically with exponential backoff and jitter (cap: 30 s). Agents react before block finalization, not after.",
+      "how_it_works": [
+        "Geyser fires account delta",
+        "Reflex Engine receives within same slot",
+        "Typed ChainEvent routed to agent callback via broadcast channel (cap: 1024)",
+        "Agent reacts — signs tx in same slot",
+        "Polling agents are still waiting"
+      ],
+      "tech": ["yellowstone-grpc-client 5", "tokio 1", "tokio-stream 0.1", "tonic 0.12"],
+      "metrics": {
+        "latency_target": "same-slot event delivery",
+        "vs_polling": "2–3 slots faster",
+        "slot_time": "400ms per slot",
+        "reconnect_backoff": "100ms → 30,000ms exponential with jitter",
+        "providers": ["Helius", "GetBlock", "Triton"]
+      }
+    },
+    {
+      "id": "zk_state",
+      "number": 3,
+      "name": "ZK State",
+      "tagline": "Compressed Secure State",
+      "icon": "layers",
+      "status": "architecture_complete",
+      "crate": "sak-state",
+      "description": "Agent state stored via Light Protocol ZK-compressed accounts. In-memory hot cache for the reflex loop critical path. Periodic flush to ZK compressed accounts for cold storage. Never read ZK state in the hot path.",
+      "how_it_works": [
+        "Agent state kept in HotCache for reflex loop (zero-latency reads)",
+        "Periodic flush_to_zk() batches writes to Light Protocol",
+        "32-byte Merkle root stored on-chain",
+        "128-byte Groth16 ZK proof for cold state reads",
+        "Validator verifies proof against root"
+      ],
+      "tech": ["light-sdk", "light-compressed-token", "light-compressed-account", "Helius indexer"],
+      "metrics": {
+        "rent_reduction": "100×–1000×",
+        "example": "1,000 agents: $300,000 → $300",
+        "hot_cache": "in-memory HashMap (current implementation)",
+        "cold_storage": "Light Protocol ZK-compressed accounts (production path)"
+      }
+    }
+  ],
+
+  "api": {
+    "crates": ["sak-guardian", "sak-core", "sak-sdk", "sak-reflex", "sak-state"],
+
+    "guardian": {
+      "struct": "Guardian",
+      "constructors": [
+        {
+          "signature": "pub fn from_yaml(path: impl AsRef<Path>) -> Result<Self>",
+          "description": "Load Guardian with rules parsed from a YAML file.",
+          "example": "let mut guardian = Guardian::from_yaml(\"rules.yaml\")?;"
+        },
+        {
+          "signature": "pub fn from_yaml_with_svm(path: impl AsRef<Path>, svm: LiteSVM) -> Result<Self>",
+          "description": "Load rules from YAML and inject an existing LiteSVM instance.",
+          "example": "let mut guardian = Guardian::from_yaml_with_svm(\"rules.yaml\", my_svm)?;"
+        },
+        {
+          "signature": "pub fn with_rules(rules: Vec<Rule>) -> Self",
+          "description": "Construct directly from a Vec<Rule>. Useful in tests.",
+          "example": "let guardian = Guardian::with_rules(vec![Rule::SlippageCheck { name: \"max_slippage\".into(), max_bps: 200 }]);"
+        }
+      ],
+      "methods": [
+        {
+          "name": "evaluate",
+          "signature": "pub fn evaluate(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision",
+          "description": "Simulate a VersionedTransaction inside LiteSVM, capture pre/post balances, then run all rules. Slower path — use for high-value transactions. Requires &mut self because LiteSVM maintains internal state.",
+          "parameters": [
+            { "name": "tx",   "type": "&VersionedTransaction", "description": "Unsigned versioned transaction. Must be a legacy message." },
+            { "name": "meta", "type": "&TxMeta",               "description": "Agent-supplied metadata (slippage_bps, description)." }
+          ],
+          "returns": "Decision::Allow or Decision::Reject { rule, reason }",
+          "note": "If LiteSVM simulation itself fails, returns Decision::Reject with rule = \"pre_sign_simulation\" and a human-readable reason string."
+        },
+        {
+          "name": "evaluate_raw",
+          "signature": "pub fn evaluate_raw(&self, account_keys: Vec<String>, instructions: &[(u8, &[u8])], meta: &TxMeta) -> Decision",
+          "description": "Evaluate rules against raw account keys and instruction data without running LiteSVM. Fastest path. Takes &self (no mutation).",
+          "parameters": [
+            { "name": "account_keys",  "type": "Vec<String>",       "description": "All account public keys referenced in the transaction (base-58)." },
+            { "name": "instructions",  "type": "&[(u8, &[u8])]",    "description": "Instruction data as (program_id_index, data) tuples — matches compiled Solana Message layout." },
+            { "name": "meta",          "type": "&TxMeta",           "description": "Agent-supplied metadata." }
+          ],
+          "returns": "Decision::Allow or Decision::Reject { rule, reason }"
+        }
+      ]
+    },
+
+    "kernel": {
+      "struct": "Kernel",
+      "crate": "sak-sdk",
+      "description": "High-level SDK entrypoint. Wraps Guardian, Reflex Engine, and ZK State into one builder-pattern interface.",
+      "config": {
+        "name": "KernelConfig",
+        "fields": [
+          { "name": "geyser_endpoint", "type": "Option<String>", "description": "Yellowstone gRPC endpoint URL." },
+          { "name": "helius_api_key",  "type": "Option<String>", "description": "API key for Helius Geyser (x_token)." },
+          { "name": "rules_path",      "type": "Option<String>", "description": "Path to rules YAML. Default: Some(\"rules.yaml\")." }
+        ]
+      },
+      "methods": [
+        { "name": "new",            "signature": "pub fn new(config: KernelConfig) -> Result<Self>",                             "description": "Create Kernel. All pillars start uninitialized." },
+        { "name": "with_guardian",  "signature": "pub fn with_guardian(self, rules_path: &str) -> Result<Self>",                "description": "Initialize Guardian from a rules YAML file." },
+        { "name": "with_reflex",    "signature": "pub fn with_reflex(self, endpoint: &str, x_token: Option<String>) -> (Self, EventRouter)", "description": "Initialize Reflex Engine. Returns (Kernel, EventRouter) — subscribe to events on the router." },
+        { "name": "with_state",     "signature": "pub fn with_state(self) -> Result<Self>",                                     "description": "Initialize ZK State manager." },
+        { "name": "submit",         "signature": "pub fn submit(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision", "description": "Submit a transaction through the Guardian. If Guardian is not initialized, logs a warning and returns Decision::Allow." },
+        { "name": "state",          "signature": "pub fn state(&mut self) -> Option<&mut ZkState>",                             "description": "Access the ZK State manager." },
+        { "name": "start_reflex",   "signature": "pub async fn start_reflex(self, filter: SubscribeFilter) -> Result<()>",      "description": "Start the Geyser subscriber (runs indefinitely with reconnect)." }
+      ]
+    },
+
+    "types": [
+      {
+        "name": "Decision",
+        "crate": "sak-core",
+        "kind": "enum",
+        "definition": "pub enum Decision {\n    Allow,\n    Reject { rule: String, reason: String },\n}",
+        "description": "The Guardian's verdict on a transaction.",
+        "variants": [
+          { "name": "Allow",  "description": "Transaction passed all rules. Proceed to sign and broadcast." },
+          { "name": "Reject", "description": "A rule fired. Do not sign. Zero on-chain cost.", "fields": [
+            { "name": "rule",   "type": "String", "description": "Name of the rule that fired (e.g. max_slippage, max_account_drain)." },
+            { "name": "reason", "type": "String", "description": "Human-readable explanation." }
+          ]}
+        ]
+      },
+      {
+        "name": "TxMeta",
+        "crate": "sak-core",
+        "kind": "struct",
+        "definition": "pub struct TxMeta {\n    pub slippage_bps: Option<u64>,\n    pub description: Option<String>,\n}",
+        "description": "Agent-supplied metadata passed alongside a transaction. Implements Default (both fields None). slippage_bps is required for the slippage_check rule to activate.",
+        "fields": [
+          { "name": "slippage_bps",  "type": "Option<u64>",    "description": "Slippage tolerance declared by the agent in basis points (100 bps = 1%). None means slippage rule is skipped." },
+          { "name": "description",   "type": "Option<String>", "description": "Human-readable description of the intended action." }
+        ]
+      },
+      {
+        "name": "ChainEvent",
+        "crate": "sak-core",
+        "kind": "struct",
+        "definition": "pub struct ChainEvent {\n    pub slot: u64,\n    pub kind: EventKind,\n}",
+        "description": "A slot-stamped on-chain event produced by the Reflex Engine."
+      },
+      {
+        "name": "EventKind",
+        "crate": "sak-core",
+        "kind": "enum",
+        "definition": "pub enum EventKind {\n    AccountChanged { pubkey: String, lamports: u64 },\n    ProgramInvoked { program_id: String },\n}",
+        "description": "The type of on-chain event."
+      },
+      {
+        "name": "Rule",
+        "crate": "sak-guardian",
+        "kind": "enum",
+        "description": "A single Guardian rule. Tagged by 'type' field in YAML. Evaluated in declaration order — first match wins.",
+        "variants": [
+          { "name": "SlippageCheck",      "yaml_type": "slippage_check",      "fields": [{ "name": "name", "type": "String" }, { "name": "max_bps",          "type": "u64"    }] },
+          { "name": "ProgramWhitelist",   "yaml_type": "program_whitelist",   "fields": [{ "name": "name", "type": "String" }, { "name": "programs",         "type": "Vec<String>" }] },
+          { "name": "DrainCheck",         "yaml_type": "drain_check",         "fields": [{ "name": "name", "type": "String" }, { "name": "max_lamports",     "type": "u64"    }] },
+          { "name": "AccountCountCheck",  "yaml_type": "account_count_check", "fields": [{ "name": "name", "type": "String" }, { "name": "max_count",        "type": "usize"  }] },
+          { "name": "ComputeUnitsCheck",  "yaml_type": "compute_units_check", "fields": [{ "name": "name", "type": "String" }, { "name": "max_units",        "type": "u32"    }] },
+          { "name": "PriorityFeeCheck",   "yaml_type": "priority_fee_check",  "fields": [{ "name": "name", "type": "String" }, { "name": "max_microlamports","type": "u64"    }] },
+          { "name": "MinTransferLamports","yaml_type": "min_transfer_lamports","fields": [{ "name": "name", "type": "String" }, { "name": "min_lamports",     "type": "u64"    }] },
+          { "name": "ValueCheck",         "yaml_type": "value_check",         "note": "Stub — always passes. YAML-compatible only.", "fields": [{ "name": "name", "type": "String" }, { "name": "max_usd", "type": "f64" }] },
+          { "name": "DecimalsCheck",      "yaml_type": "decimals_check",      "note": "Stub — always passes. YAML-compatible only.", "fields": [{ "name": "name", "type": "String" }, { "name": "token", "type": "String" }, { "name": "expected_decimals", "type": "u8" }] }
+        ]
+      },
+      {
+        "name": "GuardianFeedback",
+        "crate": "sak-core",
+        "kind": "struct",
+        "definition": "pub struct GuardianFeedback {\n    pub timestamp: String,\n    pub decision: String,\n    pub rule: Option<String>,\n    pub description: Option<String>,\n    pub stars: u8,\n    pub verdict: FeedbackVerdict,\n}",
+        "description": "User feedback submission for a Guardian decision. POST to /feedback on race-server."
+      },
+      {
+        "name": "FeedbackVerdict",
+        "crate": "sak-core",
+        "kind": "enum",
+        "definition": "pub enum FeedbackVerdict {\n    Correct,\n    Wrong,\n    Neutral,\n}",
+        "description": "Derived from star rating: 4–5 = Correct, 1–2 = Wrong, 3 = Neutral."
+      },
+      {
+        "name": "AgentState",
+        "crate": "sak-state",
+        "kind": "struct",
+        "definition": "pub struct AgentState {\n    pub agent_id: String,\n    pub last_n_decisions: Vec<DecisionRecord>,\n    pub open_positions: Vec<Position>,\n    pub cooldown_until_slot: u64,\n    pub violation_history: Vec<String>,\n}",
+        "description": "Agent state stored in ZK-compressed accounts (or hot cache in current implementation)."
+      },
+      {
+        "name": "SubscribeFilter",
+        "crate": "sak-reflex",
+        "kind": "struct",
+        "definition": "pub struct SubscribeFilter {\n    pub account_pubkeys: Vec<String>,\n    pub program_ids: Vec<String>,\n}",
+        "description": "Filter for Geyser subscription — which accounts and programs to watch."
+      },
+      {
+        "name": "SakError",
+        "crate": "sak-core",
+        "kind": "enum",
+        "definition": "pub enum SakError {\n    Geyser(String),\n    Simulation(String),\n    RuleViolation { rule: String, reason: String },\n    State(String),\n    Rpc(String),\n}",
+        "description": "Workspace-level error type. Implements std::error::Error."
+      }
+    ]
+  },
+
+  "rules": [
+    {
+      "yaml_name": "max_slippage",
+      "yaml_type": "slippage_check",
+      "rust_variant": "Rule::SlippageCheck",
+      "description": "Blocks any transaction whose agent-declared slippage exceeds the basis-point cap. Operates on TxMeta.slippage_bps — if None, this rule is skipped.",
+      "real_attack": "LLM hallucinates 99% slippage — entire swap value drains to attacker on next fill.",
+      "active_config": {
+        "name": "max_slippage",
+        "type": "slippage_check",
+        "max_bps": 200
+      },
+      "parameters": [
+        { "name": "max_bps", "type": "u64", "description": "Maximum allowed slippage in basis points. 100 bps = 1%." }
+      ],
+      "rejection_format": "slippage {bps}bps exceeds max {max_bps}bps",
+      "rejection_example": "slippage 9900bps exceeds max 200bps",
+      "recommended_value": "50–300 bps depending on strategy",
+      "severity": "critical"
+    },
+    {
+      "yaml_name": "allowed_programs",
+      "yaml_type": "program_whitelist",
+      "rust_variant": "Rule::ProgramWhitelist",
+      "description": "Blocks any instruction invoking a program not on the explicit whitelist. Evaluated per-instruction — one unlisted program rejects the whole transaction.",
+      "real_attack": "LLM generates a fake program ID (looks valid, isn't). Malicious code executes with agent's signing authority.",
+      "active_config": {
+        "name": "allowed_programs",
+        "type": "program_whitelist",
+        "programs": [
+          "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",
+          "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",
+          "11111111111111111111111111111111",
+          "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+          "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ",
+          "ComputeBudget111111111111111111111111111111"
+        ]
+      },
+      "whitelisted_programs": [
+        { "address": "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4",  "label": "Jupiter v6" },
+        { "address": "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc",   "label": "Orca Whirlpool" },
+        { "address": "11111111111111111111111111111111",                 "label": "System Program" },
+        { "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",   "label": "SPL Token" },
+        { "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ",    "label": "Associated Token Account" },
+        { "address": "ComputeBudget111111111111111111111111111111",      "label": "Compute Budget" }
+      ],
+      "parameters": [
+        { "name": "programs", "type": "Vec<String>", "description": "List of allowed program public keys (base-58)." }
+      ],
+      "rejection_format": "program {program_id} is not in the whitelist",
+      "rejection_example": "program MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr is not in the whitelist",
+      "recommended_value": "Start strict. Add programs only after manual verification.",
+      "severity": "high"
+    },
+    {
+      "yaml_name": "max_account_drain",
+      "yaml_type": "drain_check",
+      "rust_variant": "Rule::DrainCheck",
+      "description": "Blocks transfers exceeding the lamport cap. In simulated mode uses actual pre/post balance deltas. In raw mode parses System Program Transfer and CreateAccount instruction data (bincode discriminant 2 and 0).",
+      "real_attack": "Grok Morse code attack — entire wallet balance transferred to attacker in one instruction.",
+      "active_config": {
+        "name": "max_account_drain",
+        "type": "drain_check",
+        "max_lamports": 1000000000
+      },
+      "parameters": [
+        { "name": "max_lamports", "type": "u64", "description": "Maximum lamports a single account may lose in one transaction. 1,000,000,000 = 1 SOL." }
+      ],
+      "rejection_format_simulated": "account {pubkey} drained {amount} lamports, max {max_lamports}",
+      "rejection_format_raw": "transfer of {lamports} lamports exceeds max {max_lamports} lamports",
+      "rejection_example": "transfer of 9950000000 lamports exceeds max 1000000000 lamports",
+      "recommended_value": "Set to maximum single trade size for your strategy.",
+      "severity": "critical"
+    },
+    {
+      "yaml_name": "max_accounts",
+      "yaml_type": "account_count_check",
+      "rust_variant": "Rule::AccountCountCheck",
+      "description": "Blocks transactions referencing more accounts than the cap. Checks tx.account_keys().len() — all accounts in the message, not just writable ones.",
+      "real_attack": "Attacker floods a transaction with 30+ accounts to hide a malicious account in the noise.",
+      "active_config": {
+        "name": "max_accounts",
+        "type": "account_count_check",
+        "max_count": 20
+      },
+      "parameters": [
+        { "name": "max_count", "type": "usize", "description": "Maximum number of accounts a transaction may reference." }
+      ],
+      "rejection_format": "{count} accounts exceeds maximum of {max_count}",
+      "rejection_example": "32 accounts exceeds maximum of 20",
+      "severity": "medium"
+    },
+    {
+      "yaml_name": "max_compute_units",
+      "yaml_type": "compute_units_check",
+      "rust_variant": "Rule::ComputeUnitsCheck",
+      "description": "Blocks transactions that set a ComputeBudget SetComputeUnitLimit instruction above the cap. Parses ComputeBudget program instructions: discriminant 0x02 followed by u32 LE units.",
+      "real_attack": "Attacker requests maximum compute to obfuscate expensive inner loops or reentrancy patterns.",
+      "active_config": {
+        "name": "max_compute_units",
+        "type": "compute_units_check",
+        "max_units": 1400000
+      },
+      "parameters": [
+        { "name": "max_units", "type": "u32", "description": "Maximum compute units a transaction may request." }
+      ],
+      "rejection_format": "compute unit limit {units} exceeds max {max_units}",
+      "rejection_example": "compute unit limit 1500000 exceeds max 1400000",
+      "severity": "medium"
+    },
+    {
+      "yaml_name": "max_priority_fee",
+      "yaml_type": "priority_fee_check",
+      "rust_variant": "Rule::PriorityFeeCheck",
+      "description": "Blocks transactions that set a ComputeBudget SetComputeUnitPrice instruction above the cap. Parses discriminant 0x03 followed by u64 LE microlamports.",
+      "real_attack": "Agent sets priority fee 100× normal, draining wallet via fees alone rather than transfers.",
+      "active_config": {
+        "name": "max_priority_fee",
+        "type": "priority_fee_check",
+        "max_microlamports": 1000000
+      },
+      "parameters": [
+        { "name": "max_microlamports", "type": "u64", "description": "Maximum priority fee in microlamports per compute unit." }
+      ],
+      "rejection_format": "priority fee {price} microlamports exceeds max {max_microlamports}",
+      "rejection_example": "priority fee 2000000 microlamports exceeds max 1000000",
+      "severity": "medium"
+    },
+    {
+      "yaml_name": "min_transfer_value",
+      "yaml_type": "min_transfer_lamports",
+      "rust_variant": "Rule::MinTransferLamports",
+      "description": "Blocks System Program Transfer instructions below the minimum lamport threshold. Catches zero-amount dust attacks used for wallet relationship tracking.",
+      "real_attack": "Attacker broadcasts 0-lamport transfers to correlate wallets for future targeting.",
+      "active_config": {
+        "name": "min_transfer_value",
+        "type": "min_transfer_lamports",
+        "min_lamports": 1
+      },
+      "parameters": [
+        { "name": "min_lamports", "type": "u64", "description": "Minimum lamports required in any System Program Transfer instruction." }
+      ],
+      "rejection_format": "transfer of {lamports} lamports is below minimum {min_lamports} lamports",
+      "rejection_example": "transfer of 0 lamports is below minimum 1 lamports",
+      "severity": "low"
+    }
+  ],
+
+  "rules_yaml_full": {
+    "title": "Active rules.yaml",
+    "description": "Exact contents of rules.yaml as shipped. Customize per deployment.",
+    "content": "rules:\n  - name: max_slippage\n    type: slippage_check\n    max_bps: 200\n\n  - name: allowed_programs\n    type: program_whitelist\n    programs:\n      - \"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\"   # Jupiter v6\n      - \"whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc\"    # Orca Whirlpool\n      - \"11111111111111111111111111111111\"                  # System program\n      - \"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA\"    # SPL Token\n      - \"ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bJ\"     # Associated Token Account\n      - \"ComputeBudget111111111111111111111111111111\"       # Compute Budget\n\n  - name: max_account_drain\n    type: drain_check\n    max_lamports: 1000000000\n\n  - name: max_accounts\n    type: account_count_check\n    max_count: 20\n\n  - name: max_compute_units\n    type: compute_units_check\n    max_units: 1400000\n\n  - name: max_priority_fee\n    type: priority_fee_check\n    max_microlamports: 1000000\n\n  - name: min_transfer_value\n    type: min_transfer_lamports\n    min_lamports: 1",
+    "language": "yaml"
+  },
+
+  "evil_corpus": {
+    "description": "20 malicious transaction patterns. All 20 blocked by Guardian out of the box. Run with: cargo test -p sak-guardian",
+    "test_file": "crates/sak-guardian/tests/evil_corpus.rs",
+    "test_command": "cargo test -p sak-guardian",
+    "expected_output": "test result: ok. 20 passed; 0 failed",
+    "attacks": [
+      { "id": 1,  "fn": "blocks_99_percent_slippage",           "name": "99% slippage swap",                "description": "Agent declares 9900 bps slippage tolerance.",                                                  "rule": "max_slippage",       "severity": "critical", "trigger": "TxMeta { slippage_bps: Some(9900) }" },
+      { "id": 2,  "fn": "blocks_wrong_token_mint",              "name": "Wrong token mint (fake USDC)",     "description": "Transfer invoking FaKe1111... program — not on whitelist.",                                 "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::from_str(\"FaKe1111111111111111111111111111111111111111\")" },
+      { "id": 3,  "fn": "blocks_full_wallet_drain",             "name": "Drain entire SOL balance",         "description": "Transfer of u64::MAX lamports.",                                                            "rule": "max_account_drain",  "severity": "critical", "trigger": "transfer_tx(&svm, &payer, &attacker, u64::MAX)" },
+      { "id": 4,  "fn": "blocks_unknown_program",               "name": "Unknown program ID",               "description": "Instruction invoking a random Address::new_unique() not in whitelist.",                     "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::new_unique()" },
+      { "id": 5,  "fn": "blocks_disguised_fee_drain",           "name": "Transfer disguised as platform fee","description": "2 SOL transfer labeled as a fee — above 1 SOL drain limit.",                              "rule": "max_account_drain",  "severity": "critical", "trigger": "transfer_tx(&svm, &payer, &attacker, 2_000_000_000)" },
+      { "id": 6,  "fn": "blocks_max_u64_slippage",              "name": "Slippage set to u64::MAX",         "description": "Arithmetic overflow exploit — u64::MAX bps declared.",                                      "rule": "max_slippage",       "severity": "critical", "trigger": "TxMeta { slippage_bps: Some(u64::MAX) }" },
+      { "id": 7,  "fn": "blocks_unlisted_jupiter_pool",         "name": "Jupiter route via unlisted pool",  "description": "Swap routed through an Address::new_unique() pool not in whitelist.",                       "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::new_unique() with Jupiter whitelisted" },
+      { "id": 8,  "fn": "blocks_zero_amount_dust_attack",       "name": "Zero-amount dust attack",          "description": "Transfer of 0 lamports — wallet relationship tracking.",                                    "rule": "min_transfer_value", "severity": "low",      "trigger": "transfer_tx(&svm, &payer, &attacker, 0)" },
+      { "id": 9,  "fn": "blocks_account_substitution_drain",    "name": "Account substitution drain",       "description": "5 SOL transfer to attacker — recipient substituted mid-instruction.",                      "rule": "max_account_drain",  "severity": "critical", "trigger": "transfer_tx(&svm, &payer, &attacker, 5_000_000_000)" },
+      { "id": 10, "fn": "blocks_balance_underflow",             "name": "Balance underflow attempt",        "description": "Transfer of 1,000,000,001 lamports — exactly 1 over the 1 SOL limit.",                    "rule": "max_account_drain",  "severity": "critical", "trigger": "transfer_tx(&svm, &payer, &attacker, 1_000_000_001)" },
+      { "id": 11, "fn": "blocks_excessive_compute_units",       "name": "Excessive compute units",          "description": "SetComputeUnitLimit(1,500,000) — above 1,400,000 cap.",                                    "rule": "max_compute_units",  "severity": "medium",   "trigger": "compute_unit_limit_ix(1_500_000)" },
+      { "id": 12, "fn": "blocks_reentrancy_cpi_loop",           "name": "Reentrancy-style CPI loop",        "description": "Instruction invoking an unlisted loop program not in whitelist.",                           "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::new_unique() loop program" },
+      { "id": 13, "fn": "blocks_fake_system_program",           "name": "Fake system program ID",           "description": "Almost-identical pubkey: 1111111111111111111111111111111F — not the real system program.",  "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::from_str(\"1111111111111111111111111111111F\")" },
+      { "id": 14, "fn": "blocks_multiple_drain_instructions",   "name": "Multiple drain instructions",      "description": "Two 1.5 SOL transfers bundled in one transaction — first exceeds limit.",                  "rule": "max_account_drain",  "severity": "critical", "trigger": "ix1 + ix2 each 1_500_000_000 lamports" },
+      { "id": 15, "fn": "blocks_slippage_bypass_via_cpi",       "name": "Slippage bypass via CPI",          "description": "Agent declares 5000bps hoping CPI routing avoids the check. Fails — metadata is always evaluated.", "rule": "max_slippage", "severity": "critical", "trigger": "TxMeta { slippage_bps: Some(5000) }" },
+      { "id": 16, "fn": "blocks_token_account_closed_mid_tx",   "name": "Token account closed mid-tx",      "description": "Malicious closer program (unlisted) attempts to manipulate token account state.",            "rule": "allowed_programs",   "severity": "high",     "trigger": "Address::new_unique() malicious_closer" },
+      { "id": 17, "fn": "blocks_excessive_priority_fee",        "name": "Priority fee 100× normal",         "description": "SetComputeUnitPrice(2,000,000) — above 1,000,000 microlamport cap.",                       "rule": "max_priority_fee",   "severity": "medium",   "trigger": "compute_unit_price_ix(2_000_000)" },
+      { "id": 18, "fn": "blocks_memo_injection",                "name": "Memo field injection",             "description": "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr not in whitelist — hidden drain instruction in memo.", "rule": "allowed_programs", "severity": "high", "trigger": "Memo program b\"INJECTED_INSTRUCTION\"" },
+      { "id": 19, "fn": "blocks_excessive_account_count",       "name": "30-account obfuscation",           "description": "30 recipients + payer + system = 32 accounts. Exceeds 20-account cap.",                    "rule": "max_accounts",       "severity": "medium",   "trigger": "30 unique recipients → 32 total accounts" },
+      { "id": 20, "fn": "blocks_unverified_program_mainnet_fail","name": "Passes local — fails mainnet",    "description": "Program passes LiteSVM (no on-chain code) but would fail on mainnet. Caught by whitelist first.", "rule": "allowed_programs", "severity": "high", "trigger": "Address::new_unique() unverified" }
+    ]
+  },
+
+  "simulation_errors": {
+    "description": "When LiteSVM simulation itself fails, Guardian returns Decision::Reject with rule = 'pre_sign_simulation' and one of these human-readable reasons.",
+    "rule_name": "pre_sign_simulation",
+    "mappings": [
+      { "raw_contains": "InsufficientFundsForRent", "human": "Insufficient funds — transaction would leave account below rent minimum" },
+      { "raw_contains": "insufficient funds | InsufficientFunds", "human": "Insufficient balance to complete transaction" },
+      { "raw_contains": "InvalidAccountData",       "human": "Invalid account data — possible wrong token address" },
+      { "raw_contains": "ProgramFailedToComplete",  "human": "Program execution failed — transaction would revert on-chain" },
+      { "raw_contains": "would exceed max | exceeds","human": "Transaction exceeds account or program limits" },
+      { "raw_contains": "(default)",                "human": "Transaction would fail on-chain — blocked before signing" }
+    ]
+  },
+
+  "demo": {
+    "architecture": "race-server (Axum WebSocket) + tx-generator subprocess + race-ui (Vite + vanilla HTML/JS)",
+    "race_server": {
+      "crate": "race-server",
+      "port": 3001,
+      "endpoints": [
+        { "method": "GET",  "path": "/ws",               "description": "WebSocket — broadcasts JSON transaction events from tx-generator subprocess" },
+        { "method": "POST", "path": "/feedback",         "description": "Accept GuardianFeedback JSON body — stored in memory FeedbackStore" },
+        { "method": "GET",  "path": "/feedback/summary", "description": "Returns { total, correct, wrong, accuracy } as JSON" }
+      ],
+      "behavior": "Spawns demo/tx-generator as a subprocess, reads its stdout line-by-line, broadcasts each line to all connected WebSocket clients. Restarts tx-generator with 5s delay on exit."
+    },
+    "race_ui": {
+      "directory": "demo/race-ui",
+      "port": 3000,
+      "tech": ["Vite 6.0.7", "Vanilla HTML/JS", "Surgena font (local otf)", "JetBrains Mono (Google Fonts)", "Lucide icons (CDN)"],
+      "fonts": {
+        "display_ui": "Surgena (light/regular/medium/semibold/bold) — served from /fonts/*.otf",
+        "code_numbers": "JetBrains Mono 400/500/700 — Google Fonts CDN"
+      },
+      "ws_url": "ws://localhost:3001/ws",
+      "design_tokens": {
+        "bg":          "#0a0a0f",
+        "surface":     "#12121a",
+        "surface_2":   "#181822",
+        "border":      "#1e1e2e",
+        "border_2":    "#2a2a3e",
+        "green":       "#00ff88",
+        "red":         "#ff3366",
+        "orange":      "#ff9900",
+        "yellow":      "#ffd700",
+        "purple":      "#7c3aed",
+        "blue":        "#3b82f6",
+        "text":        "#ffffff",
+        "text_2":      "#8888aa",
+        "text_3":      "#54546a"
+      }
+    }
+  },
+
+  "integration": {
+    "quick_start": {
+      "steps": [
+        { "step": 1, "title": "Clone the repo",              "code": "git clone https://github.com/BALAJI-SK/sak\ncd sak",                          "language": "bash" },
+        { "step": 2, "title": "Build the workspace",         "code": "cargo build --workspace",                                                       "language": "bash" },
+        { "step": 3, "title": "Run the evil corpus tests",   "code": "cargo test -p sak-guardian",                                                    "language": "bash" },
+        { "step": 4, "title": "Start the WebSocket server",  "code": "cargo run -p race-server",                                                      "language": "bash" },
+        { "step": 5, "title": "Start the React UI",          "code": "cd demo/race-ui\nnpm install\nnpm run dev",                                     "language": "bash" },
+        { "step": 6, "title": "Open in browser",             "code": "http://localhost:3000",                                                          "language": "bash" }
+      ]
+    },
+    "rust_guardian_example": {
+      "title": "Guardian — direct usage",
+      "code": "use sak_guardian::{Guardian, Rule};\nuse sak_core::{Decision, TxMeta};\n\n// Load rules from YAML\nlet mut guardian = Guardian::from_yaml(\"rules.yaml\")?;\n\n// Your LLM generates an unsigned VersionedTransaction\nlet meta = TxMeta {\n    slippage_bps: Some(150),          // 1.5% — within 2% cap\n    description: Some(\"swap 100 USDC for SOL\".into()),\n};\n\nmatch guardian.evaluate(&tx, &meta) {\n    Decision::Allow => {\n        // Sign and broadcast\n    }\n    Decision::Reject { rule, reason } => {\n        // Zero on-chain cost\n        eprintln!(\"Blocked by {rule}: {reason}\");\n    }\n}",
+      "language": "rust"
+    },
+    "rust_kernel_example": {
+      "title": "Kernel SDK — full stack",
+      "code": "use sak_sdk::{Kernel, KernelConfig};\nuse sak_core::TxMeta;\n\n#[tokio::main]\nasync fn main() -> anyhow::Result<()> {\n    let mut kernel = Kernel::new(KernelConfig::default())?\n        .with_guardian(\"rules.yaml\")?\n        .with_state()?;\n\n    let meta = TxMeta {\n        slippage_bps: Some(150),\n        description: Some(\"swap 100 USDC for SOL\".into()),\n    };\n\n    match kernel.submit(&tx, &meta) {\n        Decision::Allow => { /* sign and broadcast */ }\n        Decision::Reject { rule, reason } => {\n            eprintln!(\"Blocked by {rule}: {reason}\");\n        }\n    }\n    Ok(())\n}",
+      "language": "rust"
+    },
+    "rust_evaluate_raw_example": {
+      "title": "evaluate_raw — fastest path (no LiteSVM)",
+      "code": "// Use when you have account keys + instruction bytes directly\nlet keys = vec![\n    \"JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4\".to_string(),\n];\nlet data: Vec<u8> = vec![0x09, 0x00]; // example ix data\nlet ixs: &[(u8, &[u8])] = &[(0, &data)];\n\nlet meta = TxMeta {\n    slippage_bps: Some(150),\n    description: None,\n};\n\nlet decision = guardian.evaluate_raw(keys, ixs, &meta);",
+      "language": "rust"
+    },
+    "elizaos_example": {
+      "title": "elizaOS plugin (planned)",
+      "code": "import { createSakPlugin } from '@sak/elizaos-plugin';\n\nconst agent = new AgentRuntime({\n  plugins: [\n    createSakPlugin({\n      rulesPath: './rules.yaml',\n      rpcUrl: process.env.SOLANA_RPC_URL,\n    }),\n  ],\n});\n// All on-chain actions now route through Guardian automatically",
+      "language": "typescript",
+      "note": "Plugin not yet published. Wire Guardian::evaluate into your elizaOS action handler directly for now."
+    }
+  },
+
+  "workspace": {
+    "resolver": "2",
+    "members": [
+      "crates/sak-core",
+      "crates/sak-reflex",
+      "crates/sak-guardian",
+      "crates/sak-state",
+      "crates/sak-sdk",
+      "crates/sak-bin",
+      "demo/tx-generator",
+      "demo/race-server"
+    ],
+    "key_dependencies": [
+      { "name": "litesvm",                    "version": "0.11",  "use": "LiteSVM simulation in Guardian" },
+      { "name": "yellowstone-grpc-client",    "version": "5",     "use": "Geyser gRPC in Reflex Engine" },
+      { "name": "tonic",                      "version": "0.12",  "use": "gRPC transport" },
+      { "name": "light-sdk",                  "version": "*",     "use": "ZK compression in ZK State" },
+      { "name": "solana-transaction",         "version": "3",     "use": "Transaction types" },
+      { "name": "solana-keypair",             "version": "3",     "use": "Keypair generation" },
+      { "name": "solana-message",             "version": "3",     "use": "Message types" },
+      { "name": "solana-compute-budget-interface", "version": "3","use": "ComputeBudget instruction helpers" },
+      { "name": "serde_yaml",                 "version": "0.9",   "use": "rules.yaml parsing" },
+      { "name": "tokio",                      "version": "1",     "use": "Async runtime (features=[full])" },
+      { "name": "anyhow",                     "version": "1",     "use": "Error handling" },
+      { "name": "tracing",                    "version": "0.1",   "use": "Structured logging" }
+    ]
+  },
+
+  "status": {
+    "phases": [
+      { "phase": 0, "name": "Workspace scaffold",            "status": "complete" },
+      { "phase": 1, "name": "sak-core (shared types)",       "status": "complete" },
+      { "phase": 2, "name": "sak-guardian (Pillar 2)",       "status": "complete" },
+      { "phase": 3, "name": "Demo UI (WebSocket + Vite)",    "status": "complete" },
+      { "phase": 4, "name": "sak-reflex (Pillar 1)",         "status": "complete" },
+      { "phase": 5, "name": "sak-state (Pillar 3)",          "status": "complete" },
+      { "phase": 6, "name": "sak-sdk (public API)",          "status": "complete" },
+      { "phase": 7, "name": "Feedback system",               "status": "complete" },
+      { "phase": 8, "name": "UI Design System",              "status": "complete" },
+      { "phase": 9, "name": "Demo recording",                "status": "pending" },
+      { "phase": 10,"name": "Deployment + submission",       "status": "pending" }
+    ],
+    "test_suite": "20/20 evil corpus tests passing",
+    "hackathon": "Colosseum Frontier — deadline May 11, 2026"
+  },
+
+  "deployment": {
+    "local": {
+      "requirements": ["Rust stable (latest)", "Node.js 18+", "Helius API key (free tier for Geyser)"],
+      "env_vars": [
+        { "name": "HELIUS_API_KEY",  "required": true,  "description": "Yellowstone Geyser API key — get free at helius.dev" },
+        { "name": "SOLANA_RPC_URL",  "required": true,  "description": "RPC endpoint. https://api.devnet.solana.com for dev." },
+        { "name": "RUST_LOG",        "required": false, "default": "info", "description": "Tracing log level." },
+        { "name": "PORT",            "required": false, "default": "3001", "description": "race-server WebSocket port." }
+      ]
+    },
+    "production": {
+      "race_server": {
+        "steps": [
+          "cargo build --release -p race-server",
+          "scp target/release/race-server user@server:/opt/sak/",
+          "Configure systemd service with HELIUS_API_KEY env var",
+          "Bind to 0.0.0.0:3001"
+        ],
+        "recommended_host": "Hetzner Frankfurt or Amsterdam — low latency to Solana validators"
+      },
+      "race_ui": {
+        "steps": [
+          "cd demo/race-ui",
+          "Update WS_URL constant to wss://your-server.com/ws",
+          "npm run build",
+          "Deploy dist/ to Vercel or equivalent"
+        ]
+      }
+    }
+  },
+
+  "faq": [
+    {
+      "question": "Does SAK slow down my agent?",
+      "answer": "Guardian evaluation takes 25–70ms locally. Geyser push saves 350–400ms vs polling. Net result: your agent is faster with SAK than without it."
+    },
+    {
+      "question": "Can't you just tell the LLM not to hallucinate?",
+      "answer": "Context window instructions are requests. The LLM follows them 97% of the time. At 1,000 tx/day, that 3% is 30 wallet drains per day. SAK's Guardian is a hard mathematical constraint — a transaction exceeding 2% slippage cannot pass. Not 97% safe. 100%."
+    },
+    {
+      "question": "Can large context windows (1M tokens) replace SAK?",
+      "answer": "No. Context window is about memory. SAK is about verification. LLM inference takes 2–10 seconds. Solana slots are 400ms. And even with perfect information, a predicted slippage is a probability — Guardian enforces it as a guarantee."
+    },
+    {
+      "question": "Why not use traditional fraud detection?",
+      "answer": "Traditional fraud detection is reactive — it runs after the transaction and relies on reversal. Blockchain transactions are final. There is no reversal. SAK is preventive — it catches bad transactions before they are signed, at machine speed, before the slot closes."
+    },
+    {
+      "question": "What if a legitimate transaction is blocked?",
+      "answer": "Adjust rules.yaml. Loosen the rule that fired, or add a program to the whitelist. All rules are configurable. False positives cost $0 — only on-chain time is wasted, never funds."
+    },
+    {
+      "question": "How does SAK handle the Grok Morse code attack?",
+      "answer": "The attack succeeded because nothing checked the transaction before execution. Guardian's max_account_drain and allowed_programs would catch it — 'send entire balance to unknown wallet' fails multiple rules simultaneously, regardless of how the instruction was generated or encoded."
+    },
+    {
+      "question": "Does SAK work with any LLM?",
+      "answer": "Yes. SAK evaluates transaction outputs, not model outputs. Works with GPT-4, Claude, Llama, Mistral, any model that generates Solana transactions."
+    },
+    {
+      "question": "What is evaluate_raw vs evaluate?",
+      "answer": "evaluate_raw takes raw account keys + instruction bytes — fastest path, no LiteSVM overhead, takes &self. evaluate runs full LiteSVM simulation and captures pre/post balances — slower but catches execution-level failures, requires &mut self. Use evaluate for high-value transactions."
+    }
+  ],
+
+  "team": [
+    { "name": "Balaji Segu Krishnaiah", "role": "Founder",    "background": ["McKinsey", "Tejas Networks"],  "education": "MSc AI, Dublin City University",               "brings": "Strategy, product, ecosystem relationships" },
+    { "name": "Prateek C",             "role": "CTO",         "background": ["Tejas Networks"],               "education": "MSc AI",                                      "brings": "Production Rust, Solana systems, implementation depth" },
+    { "name": "Sai Shreyas Gubbi Harish","role": "Co-Founder", "background": ["Ernst & Young"],               "education": "MSc Cloud Computing, National College of Ireland", "brings": "Infrastructure, cloud deployment, DevOps" },
+    { "name": "Tejas Shiv Kumar",      "role": "CMO",         "background": ["AceMicromatic"],                "education": "MSc Data Analytics, Dublin City University",  "brings": "GTM, narrative, competitive research" }
+  ],
+
+  "hackathon": {
+    "event": "Colosseum Frontier",
+    "deadline": "May 11, 2026",
+    "track": "Infrastructure",
+    "university_prize_eligible": true,
+    "university_note": "All four team members are active MSc students at DCU and NCI Dublin",
+    "prizes": {
+      "grand_champion": "$30,000",
+      "university_prize": "$10,000",
+      "accelerator": "$250,000 path"
+    },
+    "demo_script_seconds": {
+      "0_10":  "Show the problem — LLM hallucinations drain wallets",
+      "10_30": "Show Guardian evaluating transactions in real time",
+      "30_60": "Show 3–4 blocked transactions with rule names and prevented loss",
+      "60_80": "Show allowed transaction going through",
+      "80_90": "CTA: Ship agents that can't be used against you"
+    }
+  }
+}
