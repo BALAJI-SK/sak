@@ -13,20 +13,18 @@ pub use sak_core::{ChainEvent, EventKind};
 
 use anyhow::Result;
 use tokio::sync::{broadcast, mpsc};
-use tracing::info;
 
 /// High-level Reflex Engine that combines subscriber + router.
 pub struct ReflexEngine {
     subscriber: GeyserSubscriber,
-    event_tx: broadcast::Sender<ChainEvent>,
 }
 
 impl ReflexEngine {
     pub fn new(endpoint: &str, x_token: Option<String>) -> (Self, EventRouter) {
         let (tx, rx) = broadcast::channel(1024);
-        let subscriber = GeyserSubscriber::new(endpoint, x_token, tx.clone());
+        let subscriber = GeyserSubscriber::new(endpoint, x_token, tx);
         let router = EventRouter::new(rx);
-        (Self { subscriber, event_tx: tx }, router)
+        (Self { subscriber }, router)
     }
 
     pub async fn run(self, filter: SubscribeFilter) -> Result<()> {
@@ -77,7 +75,7 @@ pub async fn start(config: ReflexConfig, tx: mpsc::Sender<ChainEvent>) -> Result
 
             let mut stream = client.subscribe_once(request).await?;
 
-            info!("SAK Reflex Engine connected");
+            tracing::info!("SAK Reflex Engine connected");
 
             while let Some(msg) = stream.next().await {
                 match msg {

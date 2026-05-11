@@ -1,6 +1,5 @@
 use sak_core::ChainEvent;
 use tokio::sync::broadcast;
-use tracing::info;
 
 /// Routes events from the Geyser subscriber to agent callbacks.
 pub struct EventRouter {

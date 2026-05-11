@@ -9,9 +9,6 @@ use solana_account::{Account, ReadableAccount};
 pub struct SimulationResult {
     pub pre_balances: HashMap<String, u64>,
     pub post_balances: HashMap<String, u64>,
-    pub logs: Vec<String>,
-    pub success: bool,
-    pub error: Option<String>,
 }
 
 pub struct Simulator {
@@ -36,7 +33,7 @@ impl Simulator {
     }
 
     /// Simulate a transaction using LiteSVM.
-    /// Returns SimulationResult with pre/post balances and logs.
+    /// Returns pre/post lamport balances per account key (base58).
     pub fn simulate(
         &mut self,
         tx: &VersionedTransaction,
@@ -72,9 +69,6 @@ impl Simulator {
                 Ok(SimulationResult {
                     pre_balances,
                     post_balances,
-                    logs: sim.meta.logs.clone(),
-                    success: true,
-                    error: None,
                 })
             }
             Err(e) => Err(format!("{:?}", e)),

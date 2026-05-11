@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use std::fmt;
 
 /// A typed on-chain event produced by the Reflex Engine.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,9 +39,9 @@ pub struct TxMeta {
 /// Feedback verdict derived from user star rating.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum FeedbackVerdict {
-    Correct,   // 4-5 stars
-    Wrong,     // 1-2 stars
-    Neutral,   // 3 stars
+    Correct, // 4–5 stars
+    Wrong,   // 1–2 stars
+    Neutral, // 3 stars
 }
 
 /// User feedback submission for a Guardian decision.
@@ -50,6 +51,47 @@ pub struct GuardianFeedback {
     pub decision: String,
     pub rule: Option<String>,
     pub description: Option<String>,
-    pub stars: u8,  // 1-5
+    pub stars: u8, // 1-5
+    #[serde(deserialize_with = "deserialize_feedback_verdict")]
     pub verdict: FeedbackVerdict,
+}
+
+/// Accepts serde's `{"Correct":null}` or a plain string (`"correct"` / `"wrong"`).
+fn deserialize_feedback_verdict<'de, D>(deserializer: D) -> Result<FeedbackVerdict, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::{self, Error as _, MapAccess, Visitor};
+
+    struct VerdictVisitor;
+    impl<'de> Visitor<'de> for VerdictVisitor {
+        type Value = FeedbackVerdict;
+
+        fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.write_str("feedback verdict")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<FeedbackVerdict, E> {
+            match v.to_ascii_lowercase().as_str() {
+                "correct" => Ok(FeedbackVerdict::Correct),
+                "wrong" => Ok(FeedbackVerdict::Wrong),
+                "neutral" => Ok(FeedbackVerdict::Neutral),
+                _ => Err(E::unknown_variant(v, &["Correct", "Wrong", "Neutral"])),
+            }
+        }
+
+        fn visit_map<M: MapAccess<'de>>(self, mut map: M) -> Result<FeedbackVerdict, M::Error> {
+            let (key, _) = map
+                .next_entry::<String, serde::de::IgnoredAny>()?
+                .ok_or_else(|| M::Error::custom("empty verdict map"))?;
+            match key.as_str() {
+                "Correct" => Ok(FeedbackVerdict::Correct),
+                "Wrong" => Ok(FeedbackVerdict::Wrong),
+                "Neutral" => Ok(FeedbackVerdict::Neutral),
+                _ => Err(M::Error::unknown_variant(&key, &["Correct", "Wrong", "Neutral"])),
+            }
+        }
+    }
+
+    deserializer.deserialize_any(VerdictVisitor)
 }

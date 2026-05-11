@@ -4,7 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>SAK Guardian — Live Demo</title>
-<meta name="sak-api-base" content="" />
+<meta name="sak-api-base" content="https://race-server-production-c5c9.up.railway.app" />
+<!-- Waitlist / marketing site (sak_ui-1 on Cloudflare). Under /guardian/ on same host, code also uses origin + "/" -->
 <meta name="sak-landing-url" content="https://sak-d89.pages.dev" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -245,7 +246,6 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
           <div id="walletInfo" style="font-family:var(--font-mono);font-size:10px;color:var(--sak-green);margin-top:4px;display:none"></div>
         </div>
       </div>
-
       <!-- Squads Policy Panel -->
       <div id="squadsPolicy" style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -261,27 +261,34 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-top:12px">
         <div style="font-size:10px;color:var(--fg-2);text-transform:uppercase;letter-spacing:0.06em;font-weight:600;margin-bottom:12px">Two-Layer Safety Stack</div>
         <svg viewBox="0 0 260 186" xmlns="http://www.w3.org/2000/svg" style="width:100%;display:block">
+          <!-- AI Agent -->
           <rect x="80" y="0" width="100" height="32" rx="6" fill="#12121a" stroke="#7c3aed" stroke-width="1.5"/>
           <text x="130" y="12" fill="#8888aa" font-size="8" text-anchor="middle" font-family="monospace" font-weight="600" letter-spacing="1">AI AGENT</text>
           <text x="130" y="24" fill="#c0c0e0" font-size="9" text-anchor="middle" font-family="monospace">intent generated</text>
-          <line x1="130" y1="32" x2="130" y2="48" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown2)"/>
+          <!-- Arrow down -->
+          <line x1="130" y1="32" x2="130" y2="48" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown)"/>
+          <!-- Layer 1 box -->
           <rect x="10" y="48" width="240" height="56" rx="8" fill="#12121a" stroke="#ff9900" stroke-width="1.5"/>
           <circle cx="26" cy="62" r="4" fill="#ff9900"/>
           <text x="36" y="66" fill="#ff9900" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">LAYER 1 — SAK GUARDIAN</text>
           <text x="16" y="80" fill="#8888aa" font-size="8.5" font-family="monospace">LiteSVM pre-sign simulation · 7 safety rules</text>
           <text x="16" y="93" fill="#8888aa" font-size="8.5" font-family="monospace">Off-chain · &lt;50ms · zero on-chain cost</text>
-          <line x1="130" y1="104" x2="130" y2="120" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown2)"/>
+          <!-- Arrow down -->
+          <line x1="130" y1="104" x2="130" y2="120" stroke="#2a2a3e" stroke-width="1.5" marker-end="url(#arrowDown)"/>
           <text x="148" y="115" fill="#54546a" font-size="8" font-family="monospace">if all rules pass</text>
+          <!-- Layer 2 box -->
           <rect x="10" y="120" width="240" height="56" rx="8" fill="#12121a" stroke="#3b82f6" stroke-width="1.5"/>
           <circle cx="26" cy="134" r="4" fill="#3b82f6"/>
           <text x="36" y="138" fill="#3b82f6" font-size="9" font-family="monospace" font-weight="700" letter-spacing="0.5">LAYER 2 — SQUADS POLICY</text>
           <text x="16" y="152" fill="#8888aa" font-size="8.5" font-family="monospace">Smart account · Spending limit $10 USDC/tx</text>
           <text x="16" y="165" fill="#8888aa" font-size="8.5" font-family="monospace">On-chain enforced · SQDS4…</text>
+          <!-- Arrow marker -->
           <defs>
-            <marker id="arrowDown2" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
+            <marker id="arrowDown" markerWidth="8" markerHeight="8" refX="4" refY="6" orient="auto">
               <path d="M2,2 L4,6 L6,2" stroke="#2a2a3e" stroke-width="1.2" fill="none"/>
             </marker>
           </defs>
+          <!-- Chain label -->
           <text x="130" y="183" fill="#54546a" font-size="8" font-family="monospace" text-anchor="middle">↓ Solana blockchain</text>
         </svg>
       </div>
@@ -346,11 +353,12 @@ body { background:var(--bg); color:var(--fg); font-family:var(--font-sans); -web
 
 <script>
 // ============================================================
-// API BASE — meta `sak-api-base`, else same-origin, else Railway HTTPS
+// API BASE — same-origin when served behind race-server; else meta or Railway HTTPS
 // ============================================================
 const API_BASE = (function () {
   const DEFAULT_API = 'https://race-server-production-c5c9.up.railway.app';
   const host = window.location.hostname || '';
+  // Static site hosts never serve /api; always use Railway unless meta points elsewhere.
   const staticSite =
     host === 'github.io' ||
     host.endsWith('.github.io') ||
@@ -360,6 +368,7 @@ const API_BASE = (function () {
     const raw = m.content.trim().replace(/\/$/, '');
     try {
       const uo = new URL(raw, window.location.href).origin;
+      // Common mistake: meta set to the Pages URL — that makes /api hit GitHub and 404.
       if (staticSite && uo === window.location.origin) return DEFAULT_API;
     } catch (_) {}
     return raw;
@@ -412,11 +421,12 @@ const spawnText = document.getElementById('spawnText');
 const spinner = document.getElementById('spinner');
 
 let storedApiKey = '';
-let isDemoMode = false;
 
 function validateKey(key) {
   return key.trim().startsWith('nvapi-') && key.trim().length > 10;
 }
+
+let isDemoMode = false;
 
 gateKey.addEventListener('input', () => {
   const v = gateKey.value;
@@ -496,8 +506,8 @@ spawnBtn.addEventListener('click', async () => {
 function wireMarketingLandingLinks() {
   const m = document.querySelector('meta[name="sak-landing-url"]');
   let raw = m && m.content ? String(m.content).trim() : '';
-  const p = window.location.pathname || '';
-  if (!raw && p.startsWith('/guardian')) {
+  const path = window.location.pathname || '';
+  if (!raw && path.startsWith('/guardian')) {
     raw = window.location.origin + '/';
   }
   if (!raw) return;
@@ -600,6 +610,7 @@ function renderSquadsPolicy(data) {
   const badge = document.getElementById('squadsBadge');
   const content = document.getElementById('squadsContent');
   if (!content) return;
+
   if (!data || data.status !== 'created') {
     if (badge) { badge.textContent = 'Offline'; badge.style.background = 'rgba(136,136,170,0.12)'; badge.style.borderColor = 'rgba(136,136,170,0.3)'; badge.style.color = 'var(--fg-2)'; }
     content.innerHTML = '<div style="font-size:12px;color:var(--fg-2)">Squads API unavailable — race-server offline</div>';
@@ -862,21 +873,33 @@ function animateFlow(lastDecision) {
     let html = '';
     const a0 = stage >= 0, a1 = stage >= 1, a2 = stage >= 2, a3 = stage >= 3;
 
+    // Node 1: AI Agent
     html += flowNodeHTML('AI Agent', 'intent', 'bot', 'var(--sak-purple)', a0, stage === 0);
+
+    // Segment 1: Agent → Guardian
     html += flowSegHTML(a1, 'var(--sak-orange)', stage === 1, particlePos);
+
+    // Node 2: Guardian (Layer 1)
     const gColor = a2 ? (isBlock ? 'var(--sak-red)' : 'var(--sak-green)') : 'var(--sak-orange)';
     html += flowNodeHTML('Guardian', a1 ? (stage === 1 ? 'sim...' : simMs + 'ms') : 'LiteSVM', 'shield', gColor, a1, stage === 1, a2 && isBlock);
 
     if (isBlock) {
+      // Segment 2: Guardian → Blocked
       html += flowSegHTML(a2, 'var(--sak-red)', false, particlePos);
+      // Node 3: Blocked (replaces Squads)
       html += flowNodeHTML('Blocked', a2 ? 'zero cost' : '—', 'x', 'var(--sak-red)', a2, stage === 2);
+      // Segment 3 + Node 4: dimmed (never reached)
       html += flowSegHTML(false, 'var(--border)', false, 0);
       html += flowNodeHTML('Solana', 'chain', 'circle', '#9945ff', false, false);
     } else {
+      // Segment 2: Guardian → Squads (Layer 2)
       html += flowSegHTML(a2, 'var(--sak-blue)', stage === 2, particlePos);
+      // Node 3: Squads Policy
       const sColor = a3 ? 'var(--sak-green)' : 'var(--sak-blue)';
       html += flowNodeHTML('Squads', a2 ? (stage === 2 ? 'policy...' : '$10 ✓') : '$10 cap', 'lock', sColor, a2, stage === 2);
+      // Segment 3: Squads → Chain
       html += flowSegHTML(a3, 'var(--sak-green)', stage === 3, particlePos);
+      // Node 4: Solana
       html += flowNodeHTML('Solana', a3 ? 'sent ✓' : 'chain', 'circle', '#9945ff', a3, stage === 3);
     }
 
@@ -958,7 +981,7 @@ function addLogCard(entry) {
       '<span style="font-family:var(--font-mono);font-size:12px;color:var(--fg-2)">' + fmtTime(entry.timestamp) + '</span>' +
       '<span style="font-family:var(--font-mono);font-size:12px;font-weight:700;color:' + msCol + '">' + entry.simulation_time_ms + 'ms</span>' +
     '</div>' +
-    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
       '<span style="font-size:16px;font-weight:600;color:var(--fg);flex:1">' + escapeHtml(entry.attack_type || entry.title) + '</span>' +
       (sevClass ? '<span class="sak-pill ' + sevClass + '">' + entry.severity + '</span>' : '') +
     '</div>' +
@@ -1080,17 +1103,19 @@ function addTraceCard(entry) {
     const tl = card.querySelector('.trace-line');
     if (!tl) return;
     const stageTimeouts = [];
+    // Stage 1: Agent → Guardian
     stageTimeouts.push(setTimeout(() => {
       const seg1 = tl.children[1].querySelector('div');
       if (seg1) { seg1.style.background = 'var(--sak-orange)'; seg1.style.backgroundImage = 'none'; seg1.style.boxShadow = '0 0 8px -1px var(--sak-orange)'; }
       tl.children[2] = createNodeHTML(tl.children[2], 'Guardian', 'sim...', 'var(--sak-orange)', true);
       reLucide();
     }, 350));
+    // Stage 2: Guardian result + Squads/Blocked
     stageTimeouts.push(setTimeout(() => {
       const guardColor = isBlock ? 'var(--sak-red)' : 'var(--sak-green)';
       tl.children[2] = createNodeHTML(tl.children[2], 'Guardian', totalMs + 'ms', guardColor, true);
-      const seg3Color = isBlock ? 'var(--sak-red)' : 'var(--sak-blue)';
       const seg3 = tl.children[3].querySelector('div');
+      const seg3Color = isBlock ? 'var(--sak-red)' : 'var(--sak-blue)';
       if (seg3) { seg3.style.background = seg3Color; seg3.style.backgroundImage = 'none'; seg3.style.boxShadow = '0 0 8px -1px ' + seg3Color; }
       if (isBlock) {
         tl.children[4] = createNodeHTML(tl.children[4], 'Blocked', 'zero cost', 'var(--sak-red)', true);
@@ -1099,6 +1124,7 @@ function addTraceCard(entry) {
       }
       reLucide();
     }, 750));
+    // Stage 3: Squads → Chain (only if allowed)
     if (!isBlock) {
       stageTimeouts.push(setTimeout(() => {
         tl.children[4] = createNodeHTML(tl.children[4], 'Squads', '$10 ✓', 'var(--sak-green)', true);
@@ -1488,6 +1514,7 @@ gateKey.focus();
 
 // ============================================================
 // YELLOWSTONE SLOT COUNTER — live devnet slot via race-server WS
+// (restarted when dashboard opens; torn down on Stop demo)
 // ============================================================
 (function setupSlotWebSocket() {
   window.__sakStartSlotWs = function () {

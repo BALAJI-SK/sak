@@ -14,7 +14,7 @@
 |--------|-----------|--------------|
 | **Pillar 2** | **Guardian** (✅ Complete) | Simulates every transaction in LiteSVM before signing. Blocks malicious tx with **zero on-chain cost**. |
 | **Pillar 1** | **Reflex Engine** (✅ Complete) | Subscribes to Yellowstone Geyser push streams. Reacts to on-chain events within the same slot. |
-| **Pillar 3** | **ZK State** (✅ Complete) | Stores agent state in Light Protocol ZK-compressed accounts. 100–1000× cheaper rent. |
+| **Pillar 3** | **ZK State** (🔧 Stub) | In-memory state backed by `HashMap`. Light Protocol ZK-compression integration is the next milestone — API surface is stable, persistence not yet wired. |
 | **SDK** | **sak-sdk** (✅ Complete) | Public API for agent developers. Simple `submit()` interface. |
 
 ---
@@ -143,7 +143,7 @@ SAK/
 │   │   └── tests/
 │   │       └── evil_corpus.rs  # 20 malicious tx patterns
 │   ├── sak-reflex/             # Pillar 1: Geyser subscriber (✅)
-│   ├── sak-state/               # Pillar 3: ZK state (✅)
+│   ├── sak-state/               # Pillar 3: ZK state (🔧 stub — in-memory)
 │   ├── sak-sdk/                # public agent-facing API (✅)
 │   └── sak-bin/                # CLI daemon (✅)
 │
@@ -321,7 +321,7 @@ The UI uses a **custom design system** inspired by monitoring consoles (Bloomber
 | 2 | sak-guardian (Pillar 2) | ✅ Complete |
 | 3 | Demo UI (WebSocket + React) | ✅ Complete |
 | 4 | sak-reflex (Pillar 1) | ✅ Complete |
-| 5 | sak-state (Pillar 3) | ✅ Complete |
+| 5 | sak-state (Pillar 3) | 🔧 Stub |
 | 6 | sak-sdk (public API) | ✅ Complete |
 | 7 | Feedback System | ✅ Complete |
 | 8 | UI Design System | ✅ Complete |

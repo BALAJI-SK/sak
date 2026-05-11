@@ -1,6 +1,7 @@
 **/target/
 .env
 *.key
+scripts/generated-creator.json
 .DS_Store
 **/.DS_Store
 **/node_modules
@@ -34,6 +35,11 @@ SOL*.md
 Demo*.md
 *.log
 *.log*
+.pages-out/
+
 .claude*
 .gemini*
 SAK GAU
+.wrangler/
+dist/
+.superstack/

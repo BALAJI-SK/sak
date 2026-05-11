@@ -1,0 +1,9 @@
+{
+  "name": "sak-scripts",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sqds/multisig": "^2.1.2",
+    "@solana/web3.js": "^1.70.3"
+  }
+}

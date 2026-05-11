@@ -38,7 +38,7 @@ yellowstone-grpc-client = "5"
 tonic = "0.12"
 tokio-stream = "0.1"
 
-# Light Protocol for ZK compression (Pillar 3)
-light-sdk = "*"
-light-compressed-token = "*"
-light-compressed-account = "*"
+# Light Protocol for ZK compression (Pillar 3) — pinned (supply chain)
+light-sdk = "0.23.0"
+light-compressed-token = "2.0.0"
+light-compressed-account = "0.11.0"

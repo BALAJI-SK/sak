@@ -11,20 +11,23 @@ pub struct Kernel {
     guardian: Option<sak_guardian::Guardian>,
     reflex: Option<sak_reflex::ReflexEngine>,
     state: Option<sak_state::ZkState>,
+    pub config: KernelConfig,
 }
 
 impl Kernel {
-    /// Create a new Kernel with default configuration.
-    pub fn new(_config: KernelConfig) -> Result<Self> {
+    /// Create a new Kernel shell. Call `with_guardian` before `submit`.
+    /// `config` is retained for Reflex/Geyser wiring (`geyser_endpoint`, `helius_api_key`).
+    pub fn new(config: KernelConfig) -> Result<Self> {
         Ok(Self {
             guardian: None,
             reflex: None,
             state: None,
+            config,
         })
     }
 
     /// Initialize the Guardian from a rules YAML file.
-    pub fn with_guardian(mut self, rules_path: &str) -> Result<Self> {
+    pub fn with_guardian(self, rules_path: &str) -> Result<Self> {
         let guardian = sak_guardian::Guardian::from_yaml(rules_path)?;
         Ok(Self {
             guardian: Some(guardian),
@@ -54,15 +57,28 @@ impl Kernel {
     }
 
     /// Submit a transaction through the Guardian.
-    /// Returns Decision after simulation + rule evaluation.
+    /// **Fail-closed:** if Guardian was not configured, returns `Reject` (never `Allow`).
     pub fn submit(&mut self, tx: &VersionedTransaction, meta: &TxMeta) -> Decision {
         match &mut self.guardian {
             Some(g) => g.evaluate(tx, meta),
             None => {
-                tracing::warn!("Guardian not initialized, allowing transaction");
-                Decision::Allow
+                tracing::error!(
+                    "Guardian not initialized — rejecting (configure with with_guardian before submit)"
+                );
+                Decision::Reject {
+                    rule: "sdk_guardian_unconfigured".into(),
+                    reason: "Kernel has no Guardian; call with_guardian() before submit()".into(),
+                }
             }
         }
+    }
+
+    /// Geyser config derived from the kernel config + process environment.
+    pub fn reflex_config(&self) -> sak_reflex::ReflexConfig {
+        sak_reflex::ReflexConfig::from_kernel_options(
+            self.config.geyser_endpoint.clone(),
+            self.config.helius_api_key.clone(),
+        )
     }
 
     /// Get the state manager.
@@ -82,18 +98,17 @@ impl Kernel {
 }
 
 /// Configuration for Kernel initialization.
+#[derive(Clone, Debug, Default)]
 pub struct KernelConfig {
     pub geyser_endpoint: Option<String>,
     pub helius_api_key: Option<String>,
     pub rules_path: Option<String>,
 }
 
-impl Default for KernelConfig {
-    fn default() -> Self {
-        Self {
-            geyser_endpoint: None,
-            helius_api_key: None,
-            rules_path: Some("rules.yaml".into()),
-        }
+impl KernelConfig {
+    pub fn rules_path_or_default(&self) -> String {
+        self.rules_path
+            .clone()
+            .unwrap_or_else(|| "rules.yaml".into())
     }
 }

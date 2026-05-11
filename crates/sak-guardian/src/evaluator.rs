@@ -19,7 +19,6 @@ pub enum TxView<'a> {
         instructions: Vec<(u8, Vec<u8>)>,
         pre_balances: std::collections::HashMap<String, u64>,
         post_balances: std::collections::HashMap<String, u64>,
-        logs: Vec<String>,
     },
 }
 
@@ -52,7 +51,6 @@ impl<'a> TxView<'a> {
             instructions,
             pre_balances: sim.pre_balances.clone(),
             post_balances: sim.post_balances.clone(),
-            logs: sim.logs.clone(),
         }
     }
 

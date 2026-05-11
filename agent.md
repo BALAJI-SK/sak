@@ -22,9 +22,16 @@ SAK (Solana Agent Kernel) is a **Rust middleware kernel** that sits between an L
 ```
 sak/
 ├── Cargo.toml                  # workspace root (resolver = "2")
+├── index.html                  # static Guardian + NVIDIA gate demo (mirrored in demo/race-ui/)
+├── agent.md                    # this file — agent / maintainer context
 ├── rules.yaml                  # Guardian rule definitions (read at runtime)
 ├── .env                        # gitignored — real secrets go here
 ├── .env.example                # committed placeholder values
+├── scripts/
+│   ├── bundle-static-demo.sh   # → .pages-out/ for Cloudflare Pages
+│   └── deploy-devnet-demo.sh   # bundle + wrangler deploy → sak-devnet-test
+├── .github/workflows/
+│   └── deploy-github-pages.yml # optional: GitHub Actions → GitHub Pages
 │
 ├── crates/
 │   ├── sak-core/               # Shared types (ChainEvent, Decision, TxMeta, …)
@@ -309,6 +316,8 @@ kernel.state().unwrap().set("id", &agent_state)?;
 ## demo/race-server
 
 **Port:** 3001  
+**Hosted:** Often deployed to **Railway** as `race-server` (HTTPS edge → container `:8080`). See **Hosted demo, Cloudflare & Railway** for env vars, CORS, and typical startup logs.
+
 **Framework:** Axum 0.7 + tokio-tungstenite  
 **Deps (relevant):** `sak-guardian`, `sak-reflex`, `sak-core`
 
@@ -321,6 +330,7 @@ kernel.state().unwrap().set("id", &agent_state)?;
 | POST | `/feedback` | Accepts `GuardianFeedback` JSON, stores in memory |
 | GET | `/feedback/summary` | Returns `{total, correct, wrong, accuracy}` |
 | POST | `/evaluate` | **Real Rust Guardian evaluation** — takes intent JSON, runs `sak-guardian::evaluate_raw`, returns decision |
+| POST | `/squads/create-agent-wallet` | **Squads Layer 2 demo** — returns mock smart account PDA, spending limit, Solscan/Squads URLs, SDK snippet. See below. |
 
 ### WebSocket message types on `/ws`
 
@@ -466,9 +476,10 @@ struct AppState {
 
 ## demo/race-ui
 
-**File:** `demo/race-ui/index.html` — standalone HTML file with inline CSS + JS. NOT a Vite/React app.
+**File:** `demo/race-ui/index.html` — standalone HTML file with inline CSS + JS. NOT a Vite/React app. Kept aligned with repo-root **`index.html`** (same gate, `API_BASE`, Stop demo, landing links). Production static demo is deployed from the **root** `index.html` bundle, not this folder.
 
-**Served on:** port 4000 (static file server, e.g. `python3 -m http.server 4000`)  
+**Served on:** port 4000 (static file server, e.g. `python3 -m http.server 4000`) or **`bun run dev`** in `demo/race-ui` (Vite proxies to `race-server`). Hosted URLs and `API_BASE` rules: see **Hosted demo, Cloudflare & Railway**.
+
 **Connects to:**
 - `http://localhost:3001` — REST: price, evaluate, feedback
 - `ws://localhost:3001/ws` — WebSocket: live slot counter (Yellowstone) + tx-generator events (not used for evaluation, just presence)
@@ -666,6 +677,14 @@ cd demo/race-ui && python3 -m http.server 4000  # Terminal 2 — serves HTML on 
 
 19. **`YELLOWSTONE_TOKEN` missing = graceful degradation, not panic.** race-server checks the env var at startup. If empty: logs a warning, skips spawning the Reflex Engine tasks. All REST endpoints (`/evaluate`, `/sol-price`, `/feedback`) still work. The slot counter in the UI stays `—`. This is intentional — the demo should not crash when run without a Yellowstone subscription.
 
+20. **Never use `fetch('/api/...')` (leading slash) on static hosts.** The path resolves from `window.location.origin` only. On `https://user.github.io/repo/`, that becomes `https://user.github.io/api/...` (404), not under `/repo/`. Always use `API_BASE + '/api/...'` with `API_BASE` set to the race-server origin on `*.github.io`, `*.pages.dev`, or via `<meta name="sak-api-base" content="https://…">`.
+
+21. **`sak-api-base` must not point at the static site itself.** If the meta URL’s origin equals the page origin on a static host, the demo JS treats it as a mistake and forces the Railway `race-server` base URL instead.
+
+22. **Cloudflare Pages hostnames** are per project. Production is typically `https://<project-name>.pages.dev/` after the first deployment. Preview builds use `https://<deployment-id>.<project-name>.pages.dev/`. Underscores are **not** allowed in Pages project names (use hyphens, e.g. `sak-devnet-test`).
+
+23. **Tx generator on Railway stays off in production** when `RAILWAY_ENVIRONMENT` is set, unless `ENABLE_TX_GENERATOR=true`. The subprocess spawns `cargo run` for `demo/tx-generator` — not appropriate for slim deploy images. This is expected in logs, not a failure.
+
 ---
 
 ## Crate Dependency Graph
@@ -697,4 +716,208 @@ tx-generator ──► sak-guardian ──► sak-core    (evaluate full tx via 
 | `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` + Yellowstone slot broadcast |
 | `race-ui` | Full | Standalone HTML demo, NVIDIA NIM → real `/evaluate` backend, JS fallback, live slot counter |
 | Demo recording | Pending | |
-| Deployment | Pending | |
+| Deployment | Partial | See **Hosted demo, Cloudflare & Railway** below — waitlist (`sak_ui-1`) and static Guardian demo are split across two Pages projects; `race-server` on Railway. |
+
+---
+
+## Hosted demo, Cloudflare & Railway
+
+This section documents how the **live NVIDIA / Guardian demo**, the **waitlist / marketing site**, and **`race-server`** are wired. Read this before changing URLs, env vars, or deploy scripts.
+
+### Repositories (two siblings)
+
+| Repo | Path (typical) | Role |
+|------|----------------|------|
+| **sak** (this workspace) | `…/solana/sak` | Rust workspace + root **`index.html`** static Guardian demo (NVIDIA key gate + dashboard). |
+| **sak_ui-1** | `…/solana/sak_ui-1` | React **waitlist / landing** (Bun build → `dist/`). Not part of this git repo — clone separately. |
+
+### Cloudflare Pages (two projects)
+
+| Pages project | Public URL (production) | Contents |
+|---------------|-------------------------|----------|
+| **`sak`** | [https://sak-d89.pages.dev](https://sak-d89.pages.dev) | **`sak_ui-1`** only: `bun run build` → `npx wrangler pages deploy dist --project-name sak`. SPA fallback `_redirects`: `/* /index.html 200`. |
+| **`sak-devnet-test`** | [https://sak-devnet-test.pages.dev](https://sak-devnet-test.pages.dev) | Static bundle from **`sak`**: `index.html` + `fonts/` (see scripts below). NVIDIA + `/evaluate` call **Railway** `race-server`. |
+
+**Naming:** Cloudflare does not allow underscores in Pages project names; the devnet demo project is **`sak-devnet-test`**, not `sak_devnet_test`.
+
+**Waitlist → demo:** In `sak_ui-1`, `src/siteUrls.ts` exports `SAK_DEVNET_TEST_DEMO_URL` (default `https://sak-devnet-test.pages.dev/`). **Devnet Test** in `src/components/landing/Navbar.tsx` opens that URL in a new tab. Update `siteUrls.ts` if Cloudflare shows a different production hostname.
+
+### Railway — `race-server`
+
+- **Example URL:** `https://race-server-production-c5c9.up.railway.app` (replace if your service is renamed).
+- **Purpose:** `/health`, `POST /evaluate` (Rust Guardian), `GET /sol-price`, `GET|POST /api/nvidia/*` (proxy to NVIDIA), `GET /ws` (slot broadcast when Reflex runs), `POST /feedback`, CORS.
+- **Useful env vars:** `CORS_ALLOWED_ORIGINS` (comma list or `*` for demos), `NVIDIA_API_KEY` if proxying without browser key, `HELIUS_API_KEY` or `YELLOWSTONE_TOKEN` (+ `YELLOWSTONE_ENDPOINT` / `GEYSER_ENDPOINT`) to enable **Reflex** / slot stream, `ENABLE_TX_GENERATOR` / `RAILWAY_ENVIRONMENT` (tx generator off on Railway by default).
+- **Typical log lines (normal):** “Tx generator disabled…”, “HELIUS_API_KEY / YELLOWSTONE_TOKEN not set — Reflex Engine disabled”, “listening on `0.0.0.0:8080`” — not fatal; REST + NVIDIA proxy still work without Reflex.
+
+### Root `index.html` & `demo/race-ui/index.html` (static demo)
+
+Keep these in sync when changing demo UX or API wiring.
+
+| Mechanism | Behavior |
+|-----------|----------|
+| **`API_BASE`** | Resolves backend for `fetch`. Reads `<meta name=”sak-api-base”>`. On `github.io`, `*.github.io`, `*.pages.dev`, uses Railway default if meta empty; if meta’s **origin equals the page origin** on those hosts, ignores meta and uses Railway (avoids “API base = Pages URL” 404s). Otherwise `location.origin` when served behind local `race-server`. |
+| **`sak-landing-url` meta** | Default in root `index.html`: `https://sak-d89.pages.dev` — **Landing page** / gate **Marketing site →** link back to waitlist. `wireMarketingLandingLinks()` also sets landing to `origin + ‘/’` when the path starts with `/guardian` and meta is empty (same-site subpath hosting — optional future use). |
+| **Demo Mode** | “Try Demo — no API key needed” button on the gate screen sets `isDemoMode = true`. Skips NVIDIA API; uses scripted attack/valid cycle (same FALLBACK_ATTACKS / FALLBACK_VALID). Guardian `/evaluate` still calls real Rust. Orange “Demo Mode” badge shown in header. `initDashboard()` resets all counters and reads `isDemoMode` to show/hide the badge. Stop demo resets `isDemoMode = false`. |
+| **Stop demo** | Header button: clears agent interval, sets `isDemoMode = false`, clears `storedApiKey` + gate input, **Phantom `disconnect()`**, resets wallet UI, runs `__sakSlotCleanup()`, fades back to **gate** screen. |
+| **Slot WebSocket** | `window.__sakStartSlotWs` / `window.__sakSlotCleanup` — started on load and again from `initDashboard()`; cleaned on Stop demo so the socket does not reconnect forever in the background. |
+| **Squads Layer 2 panel** | `initSquadsPolicy()` called from `initDashboard()`. POSTs to `/squads/create-agent-wallet`. `renderSquadsPolicy(data)` populates `#squadsContent` with address, $10 USDC/tx limit, Solscan ↗ and Squads ↗ links, and the `api_note`. Falls back to “Offline” state if race-server unreachable. |
+
+### Deploy scripts (`sak/`)
+
+| Script | What it does |
+|--------|----------------|
+| **`scripts/bundle-static-demo.sh`** | Copies `index.html` and `fonts/` → **`.pages-out/`** (gitignored). |
+| **`scripts/deploy-devnet-demo.sh`** | Runs the bundle script, then `npx wrangler pages deploy .pages-out --project-name "${CF_PAGES_DEMO_PROJECT:-sak-devnet-test}"`. Requires `wrangler login` (or API token) on the machine running deploy. |
+
+**First-time Cloudflare project:** `npx wrangler pages project create sak-devnet-test --production-branch=main` then deploy.
+
+### GitHub Pages (optional)
+
+- Workflow: **`.github/workflows/deploy-github-pages.yml`** — builds `_site` from `index.html` + `fonts/`, deploys via GitHub Actions **Pages** (repo Settings → Pages → source **GitHub Actions**).
+- If Pages source stays **“Deploy from branch”**, push updated `index.html` to that branch instead.
+
+### Local dev (`demo/race-ui`)
+
+- **`vite.config.ts`** proxies `/evaluate`, `/squads`, `/feedback`, `/sol-price`, `/health`, `/ws` to `127.0.0.1:3001` (local `race-server`).
+- **`demo/race-ui/index.html`** mirrors root demo; `sak-api-base` meta is often empty so `API_BASE` follows `localhost` during Vite.
+
+### Future checklist (for maintainers)
+
+1. **After editing root `index.html`:** redeploy **`sak-devnet-test`** (and GitHub Pages / other mirrors if used). Re-run **`sak_ui-1` build + deploy `sak`** only if you still copy demo into waitlist (currently **not** bundled — demo is separate project).
+2. **CORS:** If Railway `CORS_ALLOWED_ORIGINS` is a strict list, add `https://sak-devnet-test.pages.dev` and `https://sak-d89.pages.dev` as needed.
+3. **Secrets:** Never commit real `NVIDIA` / `HELIUS` keys; keep **`.env.example`** as placeholders only; rotate any key that was ever committed.
+4. **CI for `sak_ui-1`:** If a workflow ever needs the Guardian HTML from this repo, check out **both** repos as siblings (`sak` next to `sak_ui-1`) or use a submodule / artifact.
+5. **Custom domains:** Point DNS at Cloudflare Pages for either project; update `siteUrls.ts`, `sak-landing-url`, and CORS allowlists accordingly.
+6. **Squads endpoint:** `/squads/create-agent-wallet` is a mock returning a pre-configured devnet address. To make it real, run `@squads-protocol/multisig` once on devnet, fund the keypair, and hardcode the resulting PDA. Update the Solscan link accordingly.
+
+---
+
+## POST /squads/create-agent-wallet
+
+**Layer 2 spending-limit policy** via Squads v4 smart accounts. The multisig was created on devnet via `scripts/create-squads-account.ts`.
+
+**Request body:**
+```json
+{
+  "agent_name": "SAK Demo Agent",
+  "spending_limit_usdc": 10
+}
+```
+
+**Response:**
+```json
+{
+  "status": "created",
+  "smart_account": "HzaSqyyW5kuGyGFndRhZjx5h24TB79ZUsxEMPUsKSfoX",
+  "config_authority": "2bzdLiLZdKRgb1zMdndTbDEgtbPwLepfjNPPCQrawaoZ",
+  "spending_limit_usdc": 10.0,
+  "spending_limit_atoms": 10000000,
+  "program_id": "SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf",
+  "explorer_url": "https://solscan.io/account/7YzHDnz...?cluster=devnet",
+  "squads_app_url": "https://v4.squads.so/multisigs/7YzHDnz...",
+  "api_note": "Squads API integration — on-chain creation requires a funded keypair...",
+  "sdk_snippet": "// @squads-protocol/multisig ... multisigCreateV2 + spendingLimitCreate"
+}
+```
+
+**Squads v4 program ID:** `SQDS4ep65T869zMMBKyuUq6aD6EgTu8psMjkvj52pCf`
+
+**To make it real:** install `@squads-protocol/multisig`, fund a devnet keypair (~0.05 SOL), call `multisigCreateV2` + `spendingLimitCreate`, hardcode the resulting PDA. The response structure doesn't change — only the addresses become real.
+
+---
+
+## Demo Mode (no API key)
+
+Added to both `index.html` and `demo/race-ui/index.html`.
+
+**Gate screen:** "Try Demo — no API key needed" button below the "Spawn AI Agent" button.
+
+**Behaviour:**
+- Sets `isDemoMode = true`, skips NVIDIA `callNVIDIA()` entirely
+- Uses scripted `FALLBACK_ATTACKS` / `FALLBACK_VALID` intents with a 300–700ms simulated delay
+- `evaluateWithBackend()` still POSTs to `/evaluate` — real Rust Guardian runs on every intent
+- Orange `Demo Mode` badge shown in dashboard header
+- `initDashboard()` resets all counters and reads `isDemoMode` to show/hide the badge
+- `stopDemoAndReturnToGate()` resets `isDemoMode = false`
+
+**Key JS variable:** `let isDemoMode = false;` (declared before `validateKey`).
+
+**Gotcha 24:** Demo Mode bypasses the NVIDIA key validation but still calls `/evaluate` on the backend. If race-server is offline, the JS `evaluateIntent()` fallback runs instead and shows an orange "JS fallback" badge — this is correct and intentional.
+
+---
+
+## Flow Diagram — Updated Architecture
+
+Both `index.html` and `demo/race-ui/index.html` now show a 4-node flow:
+
+```
+AI Agent → Guardian → Squads → Solana
+```
+
+Previously: `AI Agent → Reflex → Guardian → Solana`
+
+**Reason for change:** The flow diagram represents the *transaction flow* (intent → evaluation → policy → chain), not the *subscription flow* (Yellowstone events). Reflex Engine is a background subscriber — it doesn't sit in the transaction path.
+
+**Node mapping in `animateFlow()`:**
+
+| Node | Icon | Color (active) | Stage |
+|------|------|---------------|-------|
+| AI Agent | `bot` | purple | 0 |
+| Guardian | `shield` | orange → red/green | 1 |
+| Squads | `lock` | blue → green | 2 (blocked: `x` / red) |
+| Solana | `circle` | #9945ff | 3 (blocked: dimmed) |
+
+**Blocked path:** Guardian rejects → shows `Blocked` node at position 3 with red styling, Squads and Solana nodes dim out (never reached).
+
+**Trace card children index map** (both files):
+
+| Index | Element |
+|-------|---------|
+| 0 | Agent node |
+| 1 | Seg: Agent→Guardian |
+| 2 | Guardian node |
+| 3 | Seg: Guardian→Squads/Blocked |
+| 4 | Squads or Blocked node |
+| 5 | Seg: Squads→Solana |
+| 6 | Solana node |
+
+Animation sequence:
+- 350ms: seg1 orange, node2 (Guardian) becomes `sim...`
+- 750ms: node2 resolves (red/green), seg3 + node4 (Squads/Blocked) activate
+- 1150ms: node4 (Squads) resolves `$10 ✓`, seg5 green, node6 (Solana) activates *(allowed only)*
+- 1100/1600ms: `.trace-outcome` fades in with rule/sig info
+
+---
+
+## What Is Complete vs Stub (Updated)
+
+| Component | Status | Notes |
+|---|---|---|
+| `sak-guardian` | Full | 20 tests passing, LiteSVM simulation working |
+| `sak-reflex` | Full | Real Yellowstone gRPC connection + reconnect |
+| `sak-state` | **Stub** | In-memory only, Light Protocol not wired. README updated to reflect this. |
+| `sak-sdk` | Full | Kernel API wraps all pillars |
+| `sak-bin` | Full | Spawns Reflex Engine, logs slots |
+| `race-server` | Full | WebSocket + feedback + SOL price proxy + `/evaluate` + `/squads/create-agent-wallet` + Yellowstone slot broadcast |
+| `race-ui` | Full | Demo Mode, NVIDIA NIM → real `/evaluate`, Squads panel, SVG architecture diagram, live slot counter |
+| Demo recording | Pending | |
+| Deployment | Partial | See **Hosted demo, Cloudflare & Railway** |
+
+**README accuracy:** Pillar 3 now marked `🔧 Stub` in both the features table and build phases table.
+
+---
+
+## Gotcha 24 — Demo Mode + JS fallback coexist
+
+When `isDemoMode === true` AND `/evaluate` is unreachable, the UI calls `evaluateIntent()` (JS fallback) and shows an orange "JS fallback" badge. The demo still runs — it just evaluates in the browser instead of calling Rust. This is intentional.
+
+## Gotcha 25 — `initDashboard()` now resets counters
+
+`initDashboard()` now explicitly resets all dashboard state:
+```javascript
+txLog = []; txCount = 0; allowedCount = 0; blockedCount = 0;
+totalPrevented = 0; feedbackCorrect = 0; feedbackWrong = 0; falsePositives = 0;
+```
+This prevents stale counts when the user stops the demo and restarts it (previously counters persisted across demo sessions).
+
+---
