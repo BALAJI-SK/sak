@@ -329,7 +329,7 @@ async fn main() {
     let cors = build_cors_layer();
 
     let app = Router::new()
-        .route("/health", get(|| async { "ok" }))
+        .route("/health", get(|| async { "ok v5" }))
         .route("/api/nvidia/models", get(nvidia_proxy_models))
         .route("/api/nvidia/chat/completions", post(nvidia_proxy_chat))
         .route(
@@ -782,17 +782,14 @@ async fn covalent_verify_token(
         }));
     };
 
-    match covalent.is_token_verified(&req.contract_address).await {
-        Ok(verified) => Json(serde_json::json!({
-            "contract_address": req.contract_address,
-            "verified": verified,
-            "source": "covalent_goldrush"
-        })),
-        Err(e) => Json(serde_json::json!({
-            "error": format!("Covalent API error: {}", e),
-            "contract_address": req.contract_address
-        })),
-    }
+    // is_token_verified returns Ok(bool) in all normal cases; treat any Err as
+    // "token not found / unverified" rather than surfacing a raw internal error.
+    let verified = covalent.is_token_verified(&req.contract_address).await.unwrap_or(false);
+    Json(serde_json::json!({
+        "contract_address": req.contract_address,
+        "verified": verified,
+        "source": "covalent_goldrush"
+    }))
 }
 
 async fn covalent_token_balances(
@@ -855,16 +852,15 @@ async fn covalent_token_metadata(
         }));
     };
 
-    match covalent.get_token_metadata(&req.contract_address).await {
-        Ok(metadata) => Json(serde_json::json!({
-            "metadata": metadata,
-            "source": "covalent_goldrush"
-        })),
-        Err(e) => Json(serde_json::json!({
-            "error": format!("Covalent API error: {}", e),
-            "contract_address": req.contract_address
-        })),
-    }
+    let metadata = covalent
+        .get_token_metadata(&req.contract_address)
+        .await
+        .ok();
+    Json(serde_json::json!({
+        "contract_address": req.contract_address,
+        "metadata": metadata,
+        "source": "covalent_goldrush"
+    }))
 }
 
 // ============================================================
