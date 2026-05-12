@@ -1,5 +1,5 @@
-# build v4 — defensive Covalent null handling
-FROM rust:1.85-slim AS builder
+# build v5 — bumped to rust 1.95 (matches local toolchain; solana-pubkey@4.2 requires ≥1.89)
+FROM rust:1.95-slim AS builder
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
