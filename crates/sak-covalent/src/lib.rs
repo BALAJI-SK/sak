@@ -144,31 +144,35 @@ impl CovalentClient {
     }
 
     /// Get token metadata and pricing for a specific token on Solana.
+    /// Returns a stub with only `contract_address` filled in if the token
+    /// is unknown or the GoldRush response is malformed — never errors on
+    /// missing/null data.
     pub async fn get_token_metadata(&self, contract_address: &str) -> Result<TokenMetadata> {
+        let stub = || TokenMetadata {
+            contract_address: contract_address.to_string(),
+            contract_name: None,
+            contract_ticker_symbol: None,
+            contract_decimals: None,
+            logo_url: None,
+            quote_rate: None,
+            quote_rate_24h: None,
+        };
+
         let url = format!(
             "{}/solana-mainnet/tokens/{}/?key={}",
             GOLDRUSH_BASE, contract_address, self.api_key
         );
 
-        let resp: serde_json::Value = self.http.get(&url).send().await?.json().await?;
+        let resp: serde_json::Value = match self.http.get(&url).send().await {
+            Ok(r) => r.json().await.unwrap_or(serde_json::Value::Null),
+            Err(_) => return Ok(stub()),
+        };
 
         let item = &resp["data"]["items"][0];
         if item.is_null() {
-            // Token not found in GoldRush — return a minimal stub so callers
-            // can treat it as unverified rather than crashing.
-            return Ok(TokenMetadata {
-                contract_address: contract_address.to_string(),
-                contract_name: None,
-                contract_ticker_symbol: None,
-                contract_decimals: None,
-                logo_url: None,
-                quote_rate: None,
-                quote_rate_24h: None,
-            });
+            return Ok(stub());
         }
-        let metadata: TokenMetadata = serde_json::from_value(item.clone())?;
-
-        Ok(metadata)
+        Ok(serde_json::from_value(item.clone()).unwrap_or_else(|_| stub()))
     }
 
     /// Check if a token is verified (has name, symbol, decimals, and logo).
