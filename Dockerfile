@@ -1,3 +1,4 @@
+# build v4 — defensive Covalent null handling
 FROM rust:1.85-slim AS builder
 
 RUN apt-get update && apt-get install -y \
