@@ -7,6 +7,8 @@ members = [
     "crates/sak-state",
     "crates/sak-sdk",
     "crates/sak-bin",
+    "crates/sak-covalent",
+    "crates/sak-jito",
     "demo/tx-generator",
     "demo/race-server",
 ]

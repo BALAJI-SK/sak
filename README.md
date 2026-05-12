@@ -22,9 +22,11 @@ cargo test -p sak-guardian  # 30 tests: 29 evil-corpus + 1 pack-load
 | Pillar | Component | Status | What It Does |
 |--------|-----------|--------|--------------|
 | **Guardian** | `sak-guardian` | ✅ Complete | Simulates every tx in LiteSVM and evaluates against a **2,010-rule** indexed policy set (9 detector types · 4 rule packs). Zero on-chain cost, <50ms. |
-| **Oracle** | `sak-reflex` | ✅ Complete | Yellowstone Geyser push oracle — emits `ChainEvent` into an async channel within the same slot. No polling, no RPC overhead. |
+| **Oracle** | `sak-reflex` | ✅ Complete | Yellowstone Geyser push oracle via RPCFast — emits `ChainEvent` into an async channel within the same slot. No polling, no RPC overhead. |
 | **State** | `sak-state` | 🔧 Stub | In-memory HashMap. Light Protocol ZK-compression is the next milestone — 100–1000× cheaper than standard accounts. API surface stable. |
 | **SDK** | `sak-sdk` | ✅ Complete | `Kernel` struct wraps all pillars. One `submit()` call integrates SAK under any agent framework. |
+| **Token data** | `sak-covalent` | ✅ Complete | Covalent GoldRush API — live token verification, wallet balance checks, and wallet risk scoring. Replaces static token data when `COVALENT_API_KEY` is set. |
+| **MEV-safe submit** | `sak-jito` | ✅ Complete | Jito Block Engine — SAK-approved transactions submitted as bundles for MEV-protected execution. `JITO_TIP_LAMPORTS` configures tip. |
 
 ## Why Prompt-Level Defenses Aren't Enough
 
@@ -156,6 +158,35 @@ python3 scripts/gen-rule-packs.py --limit 2000
 - The `tokens-blocklist.yaml` pack is generated deterministically from `solana-labs/token-list`. Anyone can diff the output against the public list.
 - The 3 exploit entries are curated placeholders, not pulled from a threat-intel feed — the right next step is plumbing in Webacy / GoPlus / on-chain post-mortem feeds.
 
+## Covalent + Jito Integration
+
+### Covalent GoldRush (`sak-covalent`)
+
+Set `COVALENT_API_KEY` and the `race-server` activates live token intelligence:
+
+| Endpoint | What it returns |
+|----------|----------------|
+| `POST /covalent/verify-token` | `{ verified: bool }` — checks name + symbol + decimals + logo |
+| `POST /covalent/token-balances` | Live SPL token holdings for any wallet |
+| `POST /covalent/wallet-risk` | Risk score 0–100 from tx history patterns |
+| `POST /covalent/token-metadata` | Quote rate, decimals, logo for any mint address |
+
+Without `COVALENT_API_KEY`, all endpoints return `{ "configured": false }` — the Guardian still works using its static `tokens-blocklist.yaml` pack.
+
+### Jito Block Engine (`sak-jito`)
+
+SAK-approved transactions can be forwarded to Jito for MEV-protected bundle submission. No API key required — Jito bundles are permissionless.
+
+| Endpoint | What it does |
+|----------|-------------|
+| `POST /jito/submit-bundle` | Submit base64-encoded tx array as a Jito bundle |
+| `GET /jito/status/:bundle_id` | Check bundle landed slot + status |
+| `GET /jito/info` | Current tip amount, tip account, block engine URL |
+
+Configure tip: `JITO_TIP_LAMPORTS=10000` (default 0.00001 SOL).
+
+**The pipeline:** Guardian evaluates → `Decision::Allow` → submit via Jito bundle → MEV-protected landing.
+
 ## API
 
 Full reference docs in [`docs/api/`](docs/api/):
@@ -164,7 +195,7 @@ Full reference docs in [`docs/api/`](docs/api/):
 |-----|----------------|
 | [`sak-sdk.md`](docs/api/sak-sdk.md) | `Kernel::new`, `submit()`, `with_guardian`, `with_reflex`, `with_state` + `Decision`, `TxMeta`, `ChainEvent` types |
 | [`sak-guardian.md`](docs/api/sak-guardian.md) | `Guardian::from_yaml`, `from_yaml_files`, `from_yaml_strings`, `with_rules`, `stats()`, `evaluate`, `evaluate_raw`, all `Rule` variants |
-| [`race-server.md`](docs/api/race-server.md) | HTTP/WS demo endpoints — `/evaluate`, `/rules/stats`, `/sol-price`, `/feedback`, `/ws` with request/response JSON |
+| [`race-server.md`](docs/api/race-server.md) | HTTP/WS demo endpoints — `/evaluate`, `/rules/stats`, `/sol-price`, `/feedback`, `/ws`, `/covalent/*`, `/jito/*` with request/response JSON |
 
 ### Guardian (minimal)
 

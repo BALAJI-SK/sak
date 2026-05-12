@@ -3729,7 +3729,9 @@ dependencies = [
  "rand 0.8.6",
  "reqwest",
  "sak-core",
+ "sak-covalent",
  "sak-guardian",
+ "sak-jito",
  "sak-reflex",
  "serde",
  "serde_json",
@@ -4077,6 +4079,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sak-covalent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sak-guardian"
 version = "0.1.0"
 dependencies = [
@@ -4093,6 +4107,20 @@ dependencies = [
  "solana-signer 3.0.0",
  "solana-system-interface 3.2.0",
  "solana-transaction 3.1.0",
+ "tracing",
+]
+
+[[package]]
+name = "sak-jito"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "solana-message 3.1.0",
+ "solana-transaction 3.1.0",
+ "tokio",
  "tracing",
 ]
 

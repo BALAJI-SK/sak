@@ -17,6 +17,8 @@ use tracing::info;
 use sak_core::{ChainEvent, Decision, FeedbackVerdict, GuardianFeedback, TxMeta};
 use sak_guardian::{Guardian, Rule};
 use sak_reflex::ReflexConfig;
+use sak_covalent::CovalentClient;
+use sak_jito::JitoClient;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -53,6 +55,10 @@ struct AppState {
     /// Loaded once at startup. `Guardian::evaluate_raw` is `&self`, so an
     /// `Arc` is sufficient — no per-request mutex required.
     guardian: Arc<Guardian>,
+    /// Covalent GoldRush client for token verification and wallet analysis.
+    covalent: Option<Arc<CovalentClient>>,
+    /// Jito client for MEV-protected bundle submission.
+    jito: Arc<JitoClient>,
 }
 
 fn sak_demo_pages_origin(origin: &str) -> bool {
@@ -219,10 +225,27 @@ async fn main() {
 
     let (tx, _) = broadcast::channel::<String>(1024);
     let guardian = Arc::new(load_runtime_guardian());
+
+    // Initialize Covalent GoldRush client (optional — requires COVALENT_API_KEY)
+    let covalent = CovalentClient::from_env().map(|c| {
+        info!("Covalent GoldRush API enabled");
+        Arc::new(c)
+    });
+
+    // Initialize Jito client for MEV-protected bundle submission
+    let jito = Arc::new(JitoClient::from_env());
+    info!(
+        tip_lamports = jito.tip_lamports(),
+        tip_sol = jito.tip_sol(),
+        "Jito bundle client initialized"
+    );
+
     let state = AppState {
         feedback: Arc::new(Mutex::new(Vec::new())),
         price: Arc::new(Mutex::new(PriceCache::new())),
         guardian,
+        covalent,
+        jito,
     };
 
     if tx_generator_enabled() {
@@ -324,6 +347,15 @@ async fn main() {
         .route("/feedback/summary", get(feedback_summary_handler))
         .route("/evaluate", post(evaluate_handler))
         .route("/rules/stats", get(rules_stats_handler))
+        // Covalent GoldRush endpoints
+        .route("/covalent/verify-token", post(covalent_verify_token))
+        .route("/covalent/token-balances", post(covalent_token_balances))
+        .route("/covalent/wallet-risk", post(covalent_wallet_risk))
+        .route("/covalent/token-metadata", post(covalent_token_metadata))
+        // Jito bundle endpoints
+        .route("/jito/submit-bundle", post(jito_submit_bundle))
+        .route("/jito/status/:bundle_id", get(jito_bundle_status))
+        .route("/jito/info", get(jito_info))
 
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(cors)
@@ -689,7 +721,7 @@ async fn evaluate_handler(
     let decision = state.guardian.evaluate_raw(account_keys, &raw_ixs, &meta);
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
-    let mut resp = match &decision {
+    let resp = match &decision {
         Decision::Allow => {
             info!(elapsed_ms, "Guardian → ALLOW");
             EvaluateResponse {
@@ -723,5 +755,170 @@ async fn evaluate_handler(
     };
 
     Json(resp)
+}
+
+// ============================================================
+// COVALENT GOLDRUSH HANDLERS
+// ============================================================
+
+#[derive(Deserialize)]
+struct CovalentTokenRequest {
+    contract_address: String,
+}
+
+#[derive(Deserialize)]
+struct CovalentWalletRequest {
+    address: String,
+}
+
+async fn covalent_verify_token(
+    State(state): State<AppState>,
+    Json(req): Json<CovalentTokenRequest>,
+) -> Json<serde_json::Value> {
+    let Some(covalent) = &state.covalent else {
+        return Json(serde_json::json!({
+            "error": "Covalent API not configured. Set COVALENT_API_KEY env var.",
+            "configured": false
+        }));
+    };
+
+    match covalent.is_token_verified(&req.contract_address).await {
+        Ok(verified) => Json(serde_json::json!({
+            "contract_address": req.contract_address,
+            "verified": verified,
+            "source": "covalent_goldrush"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Covalent API error: {}", e),
+            "contract_address": req.contract_address
+        })),
+    }
+}
+
+async fn covalent_token_balances(
+    State(state): State<AppState>,
+    Json(req): Json<CovalentWalletRequest>,
+) -> Json<serde_json::Value> {
+    let Some(covalent) = &state.covalent else {
+        return Json(serde_json::json!({
+            "error": "Covalent API not configured. Set COVALENT_API_KEY env var.",
+            "configured": false
+        }));
+    };
+
+    match covalent.get_token_balances(&req.address).await {
+        Ok(balances) => Json(serde_json::json!({
+            "address": req.address,
+            "chain": "solana-mainnet",
+            "balances": balances,
+            "count": balances.len(),
+            "source": "covalent_goldrush"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Covalent API error: {}", e),
+            "address": req.address
+        })),
+    }
+}
+
+async fn covalent_wallet_risk(
+    State(state): State<AppState>,
+    Json(req): Json<CovalentWalletRequest>,
+) -> Json<serde_json::Value> {
+    let Some(covalent) = &state.covalent else {
+        return Json(serde_json::json!({
+            "error": "Covalent API not configured. Set COVALENT_API_KEY env var.",
+            "configured": false
+        }));
+    };
+
+    match covalent.assess_wallet_risk(&req.address).await {
+        Ok(assessment) => Json(serde_json::json!({
+            "assessment": assessment,
+            "source": "covalent_goldrush"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Covalent API error: {}", e),
+            "address": req.address
+        })),
+    }
+}
+
+async fn covalent_token_metadata(
+    State(state): State<AppState>,
+    Json(req): Json<CovalentTokenRequest>,
+) -> Json<serde_json::Value> {
+    let Some(covalent) = &state.covalent else {
+        return Json(serde_json::json!({
+            "error": "Covalent API not configured. Set COVALENT_API_KEY env var.",
+            "configured": false
+        }));
+    };
+
+    match covalent.get_token_metadata(&req.contract_address).await {
+        Ok(metadata) => Json(serde_json::json!({
+            "metadata": metadata,
+            "source": "covalent_goldrush"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Covalent API error: {}", e),
+            "contract_address": req.contract_address
+        })),
+    }
+}
+
+// ============================================================
+// JITO BUNDLE HANDLERS
+// ============================================================
+
+#[derive(Deserialize)]
+struct JitoBundleRequest {
+    transactions: Vec<String>,
+}
+
+async fn jito_submit_bundle(
+    State(state): State<AppState>,
+    Json(req): Json<JitoBundleRequest>,
+) -> Json<serde_json::Value> {
+    info!(
+        tx_count = req.transactions.len(),
+        "Jito bundle submission requested"
+    );
+
+    match state.jito.submit_bundle(req.transactions).await {
+        Ok(result) => Json(serde_json::json!({
+            "result": result,
+            "source": "jito_block_engine"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Jito submission error: {}", e)
+        })),
+    }
+}
+
+async fn jito_bundle_status(
+    State(state): State<AppState>,
+    axum::extract::Path(bundle_id): axum::extract::Path<String>,
+) -> Json<serde_json::Value> {
+    match state.jito.get_bundle_status(&bundle_id).await {
+        Ok(status) => Json(serde_json::json!({
+            "status": status,
+            "source": "jito_block_engine"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Jito status error: {}", e),
+            "bundle_id": bundle_id
+        })),
+    }
+}
+
+async fn jito_info(State(state): State<AppState>) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "tip_lamports": state.jito.tip_lamports(),
+        "tip_sol": state.jito.tip_sol(),
+        "tip_account": state.jito.tip_account(),
+        "block_engine": "https://mainnet.block-engine.jito.wtf",
+        "source": "jito"
+    }))
 }
 
