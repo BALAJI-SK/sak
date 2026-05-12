@@ -153,6 +153,19 @@ impl CovalentClient {
         let resp: serde_json::Value = self.http.get(&url).send().await?.json().await?;
 
         let item = &resp["data"]["items"][0];
+        if item.is_null() {
+            // Token not found in GoldRush — return a minimal stub so callers
+            // can treat it as unverified rather than crashing.
+            return Ok(TokenMetadata {
+                contract_address: contract_address.to_string(),
+                contract_name: None,
+                contract_ticker_symbol: None,
+                contract_decimals: None,
+                logo_url: None,
+                quote_rate: None,
+                quote_rate_24h: None,
+            });
+        }
         let metadata: TokenMetadata = serde_json::from_value(item.clone())?;
 
         Ok(metadata)
