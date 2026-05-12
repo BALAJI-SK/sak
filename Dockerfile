@@ -19,10 +19,14 @@ FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y \
     libssl3 \
     ca-certificates \
+    libgcc-s1 \
+    libstdc++6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY --from=builder /app/target/release/race-server /app/race-server
 COPY --from=builder /app/packs /app/packs
 
+EXPOSE 8080
+ENV PORT=8080
 CMD ["/app/race-server"]
