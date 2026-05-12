@@ -25,5 +25,4 @@ WORKDIR /app
 COPY --from=builder /app/target/release/race-server /app/race-server
 COPY --from=builder /app/packs /app/packs
 
-EXPOSE 3001
 CMD ["/app/race-server"]
