@@ -1,3 +1,2 @@
 [deploy]
 healthcheckPath = "/health"
-startCommand = "/app/race-server"

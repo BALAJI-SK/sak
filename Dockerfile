@@ -1,4 +1,4 @@
-# build v5 — bumped to rust 1.95 (matches local toolchain; solana-pubkey@4.2 requires ≥1.89)
+# build v6 — keep runtime on rust image to avoid missing shared libs at startup
 FROM rust:1.95-slim AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -15,13 +15,7 @@ COPY . .
 
 RUN cargo build -p race-server --release
 
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y \
-    libssl3 \
-    ca-certificates \
-    libgcc-s1 \
-    libstdc++6 \
-    && rm -rf /var/lib/apt/lists/*
+FROM rust:1.95-slim
 
 WORKDIR /app
 COPY --from=builder /app/target/release/race-server /app/race-server
