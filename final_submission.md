@@ -289,6 +289,22 @@ cloudflare pages           ✅ Live on sak-devnet-test.pages.dev
 
 ---
 
+## Anything Else?
+
+We built SAK as a production-oriented safety kernel for AI agents on Solana, and integrated multiple infrastructure layers into one execution pipeline:
+
+- **SAK Guardian**: deterministic pre-sign transaction simulation + policy enforcement (2,010 rules).
+- **Covalent GoldRush**: live token verification, wallet balances, and wallet risk context.
+- **Jito**: bundle-based execution path for SAK-approved transactions.
+- **Ika (MVP integration)**: custody/interoperability policy checks for cross-chain intents.
+- **Encrypt (MVP integration)**: confidential-risk evaluation path for privacy-sensitive decisioning.
+
+**Repo:** https://github.com/BALAJI-SK/sak  
+**Live demo/UI:** https://sak-devnet-test.pages.dev  
+**Backend/API:** https://race-server-production-c5c9.up.railway.app
+
+---
+
 ## Submission Summary (Judge TL;DR)
 
 SAK is not another AI agent. It is the **safety kernel that every Solana AI agent needs but none have built**. In 5,428 Colosseum submissions, no winning project owns the kernel/SDK layer for agent execution safety. SAK fills that gap with:

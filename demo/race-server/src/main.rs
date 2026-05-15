@@ -19,6 +19,8 @@ use sak_guardian::{Guardian, Rule};
 use sak_reflex::ReflexConfig;
 use sak_covalent::CovalentClient;
 use sak_jito::JitoClient;
+use sak_ika::{IkaClient, IkaIntent};
+use sak_encrypt::{ConfidentialRiskRequest, EncryptClient};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -59,6 +61,10 @@ struct AppState {
     covalent: Option<Arc<CovalentClient>>,
     /// Jito client for MEV-protected bundle submission.
     jito: Arc<JitoClient>,
+    /// Ika dWallet/MPC policy client for bridgeless custody checks.
+    ika: Option<Arc<IkaClient>>,
+    /// Encrypt confidential risk client for private policy evaluation.
+    encrypt: Option<Arc<EncryptClient>>,
 }
 
 fn sak_demo_pages_origin(origin: &str) -> bool {
@@ -240,12 +246,26 @@ async fn main() {
         "Jito bundle client initialized"
     );
 
+    // Initialize Ika client (optional — requires IKA_BASE_URL or IKA_API_KEY)
+    let ika = IkaClient::from_env().map(|c| {
+        info!("Ika dWallet integration enabled");
+        Arc::new(c)
+    });
+
+    // Initialize Encrypt client (optional — requires ENCRYPT_BASE_URL or ENCRYPT_API_KEY)
+    let encrypt = EncryptClient::from_env().map(|c| {
+        info!("Encrypt confidential policy integration enabled");
+        Arc::new(c)
+    });
+
     let state = AppState {
         feedback: Arc::new(Mutex::new(Vec::new())),
         price: Arc::new(Mutex::new(PriceCache::new())),
         guardian,
         covalent,
         jito,
+        ika,
+        encrypt,
     };
 
     if tx_generator_enabled() {
@@ -356,6 +376,12 @@ async fn main() {
         .route("/jito/submit-bundle", post(jito_submit_bundle))
         .route("/jito/status/:bundle_id", get(jito_bundle_status))
         .route("/jito/info", get(jito_info))
+        // Ika dWallet / MPC endpoints
+        .route("/ika/evaluate-intent", post(ika_evaluate_intent))
+        .route("/ika/health", get(ika_health))
+        // Encrypt confidential policy endpoints
+        .route("/encrypt/confidential-risk", post(encrypt_confidential_risk))
+        .route("/encrypt/health", get(encrypt_health))
 
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(cors)
@@ -916,5 +942,99 @@ async fn jito_info(State(state): State<AppState>) -> Json<serde_json::Value> {
         "block_engine": "https://mainnet.block-engine.jito.wtf",
         "source": "jito"
     }))
+}
+
+// ============================================================
+// IKA (dWallet / MPC) HANDLERS
+// ============================================================
+
+async fn ika_evaluate_intent(
+    State(state): State<AppState>,
+    Json(req): Json<IkaIntent>,
+) -> Json<serde_json::Value> {
+    let Some(ika) = &state.ika else {
+        return Json(serde_json::json!({
+            "error": "Ika not configured. Set IKA_BASE_URL and optionally IKA_API_KEY.",
+            "configured": false
+        }));
+    };
+
+    match ika.evaluate_intent(&req).await {
+        Ok(result) => Json(serde_json::json!({
+            "evaluation": result,
+            "source": "ika"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Ika error: {}", e)
+        })),
+    }
+}
+
+async fn ika_health(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let Some(ika) = &state.ika else {
+        return Json(serde_json::json!({
+            "configured": false,
+            "error": "Ika not configured"
+        }));
+    };
+
+    match ika.health().await {
+        Ok(status) => Json(serde_json::json!({
+            "configured": true,
+            "status": status,
+            "source": "ika"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "configured": true,
+            "error": format!("Ika health check failed: {}", e)
+        })),
+    }
+}
+
+// ============================================================
+// ENCRYPT (Confidential policy) HANDLERS
+// ============================================================
+
+async fn encrypt_confidential_risk(
+    State(state): State<AppState>,
+    Json(req): Json<ConfidentialRiskRequest>,
+) -> Json<serde_json::Value> {
+    let Some(encrypt) = &state.encrypt else {
+        return Json(serde_json::json!({
+            "error": "Encrypt not configured. Set ENCRYPT_BASE_URL and optionally ENCRYPT_API_KEY.",
+            "configured": false
+        }));
+    };
+
+    match encrypt.evaluate_confidential_risk(&req).await {
+        Ok(result) => Json(serde_json::json!({
+            "result": result,
+            "source": "encrypt"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "error": format!("Encrypt error: {}", e)
+        })),
+    }
+}
+
+async fn encrypt_health(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let Some(encrypt) = &state.encrypt else {
+        return Json(serde_json::json!({
+            "configured": false,
+            "error": "Encrypt not configured"
+        }));
+    };
+
+    match encrypt.health().await {
+        Ok(status) => Json(serde_json::json!({
+            "configured": true,
+            "status": status,
+            "source": "encrypt"
+        })),
+        Err(e) => Json(serde_json::json!({
+            "configured": true,
+            "error": format!("Encrypt health check failed: {}", e)
+        })),
+    }
 }
 

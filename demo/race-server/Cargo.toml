@@ -16,6 +16,8 @@ sak-reflex  = { path = "../../crates/sak-reflex" }
 sak-core = { path = "../../crates/sak-core" }
 sak-covalent = { path = "../../crates/sak-covalent" }
 sak-jito = { path = "../../crates/sak-jito" }
+sak-ika = { path = "../../crates/sak-ika" }
+sak-encrypt = { path = "../../crates/sak-encrypt" }
 litesvm = { workspace = true }
 solana-keypair = { workspace = true }
 solana-message = { workspace = true }

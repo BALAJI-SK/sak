@@ -27,6 +27,8 @@ cargo test -p sak-guardian  # 30 tests: 29 evil-corpus + 1 pack-load
 | **SDK** | `sak-sdk` | ✅ Complete | `Kernel` struct wraps all pillars. One `submit()` call integrates SAK under any agent framework. |
 | **Token data** | `sak-covalent` | ✅ Complete | Covalent GoldRush API — live token verification, wallet balance checks, and wallet risk scoring. Replaces static token data when `COVALENT_API_KEY` is set. |
 | **MEV-safe submit** | `sak-jito` | ✅ Complete | Jito Block Engine — SAK-approved transactions submitted as bundles for MEV-protected execution. `JITO_TIP_LAMPORTS` configures tip. |
+| **Cross-chain custody** | `sak-ika` | ✅ MVP | Ika dWallet/MPC policy checks for cross-chain intents before execution. Optional via `IKA_BASE_URL` / `IKA_API_KEY`. |
+| **Confidential policy** | `sak-encrypt` | ✅ MVP | Encrypt confidential risk evaluation path (REFHE-style API + safe fallback). Optional via `ENCRYPT_BASE_URL` / `ENCRYPT_API_KEY`. |
 
 ## Why Prompt-Level Defenses Aren't Enough
 
@@ -187,6 +189,36 @@ Configure tip: `JITO_TIP_LAMPORTS=10000` (default 0.00001 SOL).
 
 **The pipeline:** Guardian evaluates → `Decision::Allow` → submit via Jito bundle → MEV-protected landing.
 
+## Ika + Encrypt Integration
+
+### Ika dWallet / MPC (`sak-ika`)
+
+SAK can evaluate cross-chain custody intents through Ika before execution. This is useful when the agent is orchestrating bridgeless or multi-chain actions and you want policy-level guardrails before signing.
+
+| Endpoint | What it does |
+|----------|-------------|
+| `POST /ika/evaluate-intent` | Evaluate a custody/interoperability intent via Ika (or conservative fallback) |
+| `GET /ika/health` | Check Ika integration health/configuration |
+
+Required/optional env:
+- `IKA_BASE_URL` (default: `https://devnet-api.ika.xyz`)
+- `IKA_API_KEY` (optional)
+
+### Encrypt confidential policy (`sak-encrypt`)
+
+SAK can evaluate transaction risk through a confidential policy path suitable for encrypted-capital-market style flows, while preserving a deterministic fallback if upstream is unavailable.
+
+| Endpoint | What it does |
+|----------|-------------|
+| `POST /encrypt/confidential-risk` | Evaluate confidential risk for an action |
+| `GET /encrypt/health` | Check Encrypt integration health/configuration |
+
+Required/optional env:
+- `ENCRYPT_BASE_URL` (default: `https://devnet-api.encrypt.foundation`)
+- `ENCRYPT_API_KEY` (optional)
+
+**Combined architecture:** Guardian remains the deterministic pre-sign gate; Ika adds custody/interoperability policy context; Encrypt adds confidential-risk context.
+
 ## API
 
 Full reference docs in [`docs/api/`](docs/api/):
@@ -195,7 +227,7 @@ Full reference docs in [`docs/api/`](docs/api/):
 |-----|----------------|
 | [`sak-sdk.md`](docs/api/sak-sdk.md) | `Kernel::new`, `submit()`, `with_guardian`, `with_reflex`, `with_state` + `Decision`, `TxMeta`, `ChainEvent` types |
 | [`sak-guardian.md`](docs/api/sak-guardian.md) | `Guardian::from_yaml`, `from_yaml_files`, `from_yaml_strings`, `with_rules`, `stats()`, `evaluate`, `evaluate_raw`, all `Rule` variants |
-| [`race-server.md`](docs/api/race-server.md) | HTTP/WS demo endpoints — `/evaluate`, `/rules/stats`, `/sol-price`, `/feedback`, `/ws`, `/covalent/*`, `/jito/*` with request/response JSON |
+| [`race-server.md`](docs/api/race-server.md) | HTTP/WS demo endpoints — `/evaluate`, `/rules/stats`, `/sol-price`, `/feedback`, `/ws`, `/covalent/*`, `/jito/*`, `/ika/*`, `/encrypt/*` with request/response JSON |
 
 ### Guardian (minimal)
 
@@ -251,7 +283,7 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 
 ## Evil Corpus
 
-29 tests. All pass. Every pattern grounded in a documented real-world attack vector:
+30 tests. All pass. 29 evil-corpus patterns grounded in documented real-world attack vectors + 1 pack-load integration test:
 
 | # | Attack Pattern | Source | Rule Fired | Severity |
 |---|----------------|--------|-----------|----------|
@@ -259,7 +291,22 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 | 2 | Wrong token mint (fake USDC) | Supply chain | `allowed_programs` | high |
 | 3 | Drain entire SOL balance | Direct drain | `max_account_drain` | critical |
 | 4 | Unknown program ID | MCP injection | `allowed_programs` | high |
-| 5–20 | Flash loans, compute bombs, CPI loops, priority-fee abuse, dust attacks, account substitution, … | _various_ | _various_ | low–critical |
+| 5 | Disguised fee drain — 2 SOL labelled as "platform fee" | Social engineering | `max_account_drain` | high |
+| 6 | Slippage set to u64::MAX | Overflow fuzzing | `max_slippage` | critical |
+| 7 | Jupiter route via unlisted liquidity pool | Supply chain | `allowed_programs` | high |
+| 8 | Zero-lamport dust attack setup | Dust / tracking | `min_transfer_value` | low |
+| 9 | Account substitution — recipient swapped for attacker (5 SOL) | Account confusion | `max_account_drain` | critical |
+| 10 | Balance underflow — 1 lamport over drain limit | Edge case fuzzing | `max_account_drain` | medium |
+| 11 | Compute bomb — 1.5 M units requested (cap: 1.4 M) | Resource abuse | `max_compute_units` | medium |
+| 12 | Reentrancy-style CPI loop through unlisted intermediary | CPI reentrancy | `allowed_programs` | high |
+| 13 | Fake system program ID (one char off) | ID spoofing | `allowed_programs` | high |
+| 14 | Two drain instructions in one tx — each 1.5 SOL | Instruction batching | `max_account_drain` | critical |
+| 15 | Slippage bypass attempt via CPI routing (50% declared) | CPI obfuscation | `max_slippage` | critical |
+| 16 | Malicious program closes token account mid-tx | Token account exploit | `allowed_programs` | high |
+| 17 | Priority fee 100x normal — 2 M microlamports (cap: 1 M) | Fee abuse | `max_priority_fee` | medium |
+| 18 | Memo-field instruction injection (Memo program not whitelisted) | Memo injection | `allowed_programs` | medium |
+| 19 | 30+ accounts in one tx — obfuscation via account bloat | Account flooding | `max_accounts` | low |
+| 20 | Unverified program that would fail on mainnet | Mainnet divergence | `allowed_programs` | high |
 | 21 | Swap touching a `blocked_program` | Blocklist pack | `<pack rule>` | medium |
 | 22 | Clean tx against 2,000-rule blocklist | Regression | _allowed_ | — |
 | 23 | Malicious tx against 2,000-rule blocklist | Blocklist pack | `real_scam` | medium |
@@ -268,7 +315,8 @@ Dashboard panels: flow diagram (Agent → Guardian → Solana), live execution t
 | **26** | **BEV sandwich victim** (9,500 bps slippage forced by MEV bot) | SlowMist/Bitget $540M stat | `max_slippage` | critical |
 | **27** | **MCP context pollution** (poisoned server injects unknown program) | SlowMist report 2026 | `allowed_programs` | high |
 | **28** | **Agent-chain laundering** (multi-hop through unlisted intermediary) | SlowMist "Agent Smuggling" | `allowed_programs` | high |
-| **29** | **Drip drain** — 20 × 0.5 SOL; each tx passes per-tx limit, cumulative 2.5 SOL trips 2 SOL session cap | Novel / this analysis | `session_spend_cap` | critical |
+| **29** | **Drip drain** — 20 x 0.5 SOL; each tx passes per-tx limit, cumulative 2.5 SOL trips 2 SOL session cap | Novel / this analysis | `session_spend_cap` | critical |
+| **30** | **Pack-load integration** — all 4 YAML packs parse; asserts >= 2,000 rules, 4 packs, all 9 detector kinds present | Regression / audit | `loads_all_shipped_packs` | — |
 
 ## Project Structure
 
@@ -280,6 +328,8 @@ crates/
   sak-state/       ZK-compressed agent state (stub)
   sak-sdk/         public Kernel API (submit, with_guardian, …)
   sak-bin/         CLI daemon
+  sak-ika/         Ika dWallet / MPC integration client
+  sak-encrypt/     Encrypt confidential policy integration client
 demo/
   race-server/     Axum HTTP + WS server (evaluate, rules/stats, sol-price, feedback, /ws)
   race-ui/         Standalone HTML dashboard (Vite dev server, port 4000)

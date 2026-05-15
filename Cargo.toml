@@ -9,6 +9,8 @@ members = [
     "crates/sak-bin",
     "crates/sak-covalent",
     "crates/sak-jito",
+    "crates/sak-ika",
+    "crates/sak-encrypt",
     "demo/tx-generator",
     "demo/race-server",
 ]
